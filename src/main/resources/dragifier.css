@@ -75,6 +75,17 @@
     -fx-font-size: 12px;
 }
 
+/* AtlantaFX 2.1.0's compiled .tooltip rule fails to convert on JavaFX 26
+   (harmless warnings at startup); style tooltips explicitly instead. */
+.tooltip {
+    -fx-background-color: #3b434c;
+    -fx-text-fill: #ffffff;
+    -fx-background-radius: 4;
+    -fx-padding: 5 8 5 8;
+    -fx-font-size: 12px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.3), 8, 0, 0, 2);
+}
+
 /* selected component outline on the design canvas */
 .design-selected {
     -fx-border-color: -color-accent-emphasis;
