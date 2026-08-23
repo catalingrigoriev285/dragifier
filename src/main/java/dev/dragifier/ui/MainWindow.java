@@ -4,6 +4,7 @@ import dev.dragifier.codegen.JavaCodeGenerator;
 import dev.dragifier.io.ProjectIO;
 import dev.dragifier.model.FormModel;
 import dev.dragifier.runner.AppRunner;
+import dev.dragifier.undo.UndoManager;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.scene.Scene;
@@ -42,12 +43,15 @@ public class MainWindow {
     private final DesignCanvas canvas = new DesignCanvas();
     private final InspectorPane inspector = new InspectorPane();
     private final EventEditorPane eventEditor = new EventEditorPane();
+    private final ComponentTreePane tree = new ComponentTreePane();
+    private final UndoManager undoManager = new UndoManager(() -> ProjectIO.toJson(model));
     private final Label status = new Label("Ready");
 
     public MainWindow(Stage stage) {
         this.stage = stage;
 
         canvas.setOnSelect(c -> {
+            tree.select(c);
             if (c == null) {
                 inspector.showForm();
                 eventEditor.showNone();
@@ -57,12 +61,20 @@ public class MainWindow {
             }
         });
         canvas.setOnOpenEvents(c -> eventEditor.focusCode());
+        canvas.setOnCheckpoint(undoManager::checkpoint);
+        inspector.setCheckpoint(() -> undoManager.checkpoint(null));
+        eventEditor.setCheckpoint(undoManager::checkpoint);
         eventEditor.setOnEdited(this::markDirty);
+        tree.setOnPick(canvas::select);
         canvas.setOnGeometryChanged(c -> {
             inspector.updateGeometry(c);
             markDirty();
         });
-        canvas.setOnStructureChanged(this::markDirty);
+        canvas.setOnStructureChanged(() -> {
+            tree.refresh();
+            tree.select(canvas.getSelected());
+            markDirty();
+        });
         inspector.setOnComponentEdited(c -> {
             canvas.refresh(c);
             markDirty();
@@ -76,7 +88,9 @@ public class MainWindow {
 
         BorderPane root = new BorderPane();
         root.setTop(new VBox(buildMenuBar(), buildToolBar()));
-        root.setLeft(new PalettePane());
+        VBox left = new VBox(new PalettePane(), tree);
+        VBox.setVgrow(tree, javafx.scene.layout.Priority.ALWAYS);
+        root.setLeft(left);
         root.setRight(inspector);
 
         StackPane canvasHolder = new StackPane(canvas);
@@ -101,6 +115,7 @@ public class MainWindow {
     private void bindModel() {
         canvas.setModel(model);
         inspector.setModel(model);
+        tree.setModel(model);
         inspector.showForm();
         eventEditor.showNone();
     }
@@ -115,13 +130,23 @@ public class MainWindow {
                 new SeparatorMenuItem(),
                 item("Exit", null, stage::close));
 
+        Menu edit = new Menu("Edit");
+        edit.getItems().addAll(
+                item("Undo", "Shortcut+Z", this::undo),
+                item("Redo", "Shortcut+Y", this::redo),
+                new SeparatorMenuItem(),
+                item("Copy", "Shortcut+C", canvas::copySelected),
+                item("Paste", "Shortcut+V", canvas::paste),
+                item("Duplicate", "Shortcut+D", canvas::duplicateSelected),
+                item("Delete", "Delete", canvas::deleteSelected));
+
         Menu project = new Menu("Project");
         project.getItems().addAll(
                 item("Run", "F5", this::run),
                 item("Quick Preview", "Shift+F5", this::preview),
                 item("Export Java Code…", "Shortcut+E", this::exportCode));
 
-        return new MenuBar(file, project);
+        return new MenuBar(file, edit, project);
     }
 
     private ToolBar buildToolBar() {
@@ -147,6 +172,7 @@ public class MainWindow {
         model = new FormModel();
         currentFile = null;
         dirty = false;
+        undoManager.clear();
         bindModel();
         updateTitle();
         status.setText("New project");
@@ -162,6 +188,7 @@ public class MainWindow {
             model = ProjectIO.load(file.toPath());
             currentFile = file.toPath();
             dirty = false;
+            undoManager.clear();
             bindModel();
             updateTitle();
             status.setText("Opened " + file.getName());
@@ -219,6 +246,32 @@ public class MainWindow {
 
     private void run() {
         AppRunner.run(model, status::setText, this::errorText);
+    }
+
+    private void undo() {
+        String snapshot = undoManager.undo();
+        if (snapshot == null) {
+            status.setText("Nothing to undo");
+            return;
+        }
+        restoreSnapshot(snapshot);
+        status.setText("Undone");
+    }
+
+    private void redo() {
+        String snapshot = undoManager.redo();
+        if (snapshot == null) {
+            status.setText("Nothing to redo");
+            return;
+        }
+        restoreSnapshot(snapshot);
+        status.setText("Redone");
+    }
+
+    private void restoreSnapshot(String json) {
+        model = ProjectIO.fromJson(json);
+        bindModel();
+        markDirty();
     }
 
     private FileChooser projectChooser() {

@@ -4,7 +4,9 @@ import dev.dragifier.codegen.JavaCodeGenerator;
 import dev.dragifier.model.ComponentType;
 import dev.dragifier.model.FormComponent;
 import dev.dragifier.model.FormModel;
+import dev.dragifier.io.ProjectIO;
 import dev.dragifier.runner.AppRunner;
+import dev.dragifier.undo.UndoManager;
 
 /**
  * Headless sanity check for the generate → compile pipeline: builds a small
@@ -44,5 +46,35 @@ public final class CodegenSmoke {
             System.err.println("SMOKE FAILED:\n" + result.errorDetails());
             System.exit(1);
         }
+
+        checkUndoRedo(model, label);
+    }
+
+    private static void checkUndoRedo(FormModel model, FormComponent label) {
+        String original = label.getText();
+        UndoManager undo = new UndoManager(() -> ProjectIO.toJson(model));
+
+        undo.checkpoint(null);
+        label.setText("Changed");
+        FormModel undone = ProjectIO.fromJson(undo.undo());
+        if (!original.equals(undone.getComponents().get(0).getText())) {
+            System.err.println("SMOKE FAILED: undo did not restore label text");
+            System.exit(1);
+        }
+        FormModel redone = ProjectIO.fromJson(undo.redo());
+        if (!"Changed".equals(redone.getComponents().get(0).getText())) {
+            System.err.println("SMOKE FAILED: redo did not restore label text");
+            System.exit(1);
+        }
+
+        UndoManager coalescing = new UndoManager(() -> ProjectIO.toJson(model));
+        coalescing.checkpoint("typing");
+        coalescing.checkpoint("typing");
+        coalescing.checkpoint("typing");
+        if (coalescing.undo() == null || coalescing.undo() != null) {
+            System.err.println("SMOKE FAILED: coalescing should record exactly one step");
+            System.exit(1);
+        }
+        System.out.println("SMOKE OK: undo/redo snapshots behave correctly.");
     }
 }

@@ -29,11 +29,21 @@ gradlew run
   `label1.setText("Hello, " + textField1.getText() + "!");`
 - **▶ Run** (F5): generates the Java source, compiles it in-process with the `javac` API,
   and launches your app as a separate Java process. Compile errors pop up with line numbers.
-- `gradlew smoke` — headless check that generated form code compiles
+- `gradlew smoke` — headless check that generated form code compiles and undo/redo behaves
+
+## What works (milestone 3)
+
+- **Undo / redo** (Ctrl+Z / Ctrl+Y): snapshot-based, covering every edit — drops, moves,
+  resizes, property changes, event code, deletes. Drags and typing bursts coalesce into
+  single undo steps.
+- **Copy / Paste / Duplicate** (Ctrl+C / Ctrl+V / Ctrl+D): clones a component with a fresh
+  id, including all its properties and event code.
+- **Component tree**: every component listed under the palette; selection syncs both ways
+  with the canvas.
 
 ## Roadmap
 
-- Component tree view, copy/paste, undo/redo, multi-select and alignment guides
+- Multi-select and alignment guides
 - More components (ImageView, ComboBox, ListView, menus) and per-type properties
 - Multiple forms per project, `jpackage`-based packaging into native installers
 

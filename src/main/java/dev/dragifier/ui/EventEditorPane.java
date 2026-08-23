@@ -20,6 +20,7 @@ public class EventEditorPane extends VBox {
     private FormComponent current;
     private boolean updating;
     private Runnable onEdited = () -> {};
+    private java.util.function.Consumer<String> checkpoint = tag -> {};
 
     private final Label header = new Label("Events");
     private final ComboBox<EventSpec> eventBox = new ComboBox<>();
@@ -59,6 +60,10 @@ public class EventEditorPane extends VBox {
 
     public void setOnEdited(Runnable onEdited) {
         this.onEdited = onEdited;
+    }
+
+    public void setCheckpoint(java.util.function.Consumer<String> checkpoint) {
+        this.checkpoint = checkpoint;
     }
 
     public void showComponent(FormComponent c) {
@@ -113,6 +118,7 @@ public class EventEditorPane extends VBox {
         if (spec == null) {
             return;
         }
+        checkpoint.accept("code:" + current.getId() + ":" + spec.key());
         if (text == null || text.isBlank()) {
             current.getEvents().remove(spec.key());
         } else {

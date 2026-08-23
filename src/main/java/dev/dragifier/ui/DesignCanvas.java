@@ -39,9 +39,13 @@ public class DesignCanvas extends Pane {
     private Consumer<FormComponent> onGeometryChanged = c -> {};
     private Runnable onStructureChanged = () -> {};
     private Consumer<FormComponent> onOpenEvents = c -> {};
+    private Consumer<String> checkpoint = tag -> {};
 
+    private FormComponent copied;
     private double dragOffsetX;
     private double dragOffsetY;
+    private boolean moveCheckpointed;
+    private boolean resizeCheckpointed;
 
     // resize drag state
     private double resizeStartX, resizeStartY;
@@ -72,6 +76,7 @@ public class DesignCanvas extends Pane {
             if (type != null && model != null) {
                 double x = clamp(snap(e.getX() - type.defaultWidth / 2), 0, Math.max(0, model.getWidth() - type.defaultWidth));
                 double y = clamp(snap(e.getY() - type.defaultHeight / 2), 0, Math.max(0, model.getHeight() - type.defaultHeight));
+                checkpoint.accept(null);
                 FormComponent c = model.create(type, x, y);
                 addWrapper(c);
                 handleGroup.toFront();
@@ -110,6 +115,9 @@ public class DesignCanvas extends Pane {
     public void setOnGeometryChanged(Consumer<FormComponent> onGeometryChanged) { this.onGeometryChanged = onGeometryChanged; }
     public void setOnStructureChanged(Runnable onStructureChanged) { this.onStructureChanged = onStructureChanged; }
     public void setOnOpenEvents(Consumer<FormComponent> onOpenEvents) { this.onOpenEvents = onOpenEvents; }
+    public void setOnCheckpoint(Consumer<String> checkpoint) { this.checkpoint = checkpoint; }
+
+    public FormComponent getSelected() { return selected; }
 
     public void setModel(FormModel model) {
         this.model = model;
@@ -175,6 +183,7 @@ public class DesignCanvas extends Pane {
             select(c);
             dragOffsetX = e.getX();
             dragOffsetY = e.getY();
+            moveCheckpointed = false;
             requestFocus();
             if (e.getClickCount() == 2) {
                 onOpenEvents.accept(c);
@@ -182,6 +191,10 @@ public class DesignCanvas extends Pane {
             e.consume();
         });
         wrapper.setOnMouseDragged(e -> {
+            if (!moveCheckpointed) {
+                checkpoint.accept(null);
+                moveCheckpointed = true;
+            }
             Point2D p = sceneToLocal(e.getSceneX(), e.getSceneY());
             double nx = clamp(snap(p.getX() - dragOffsetX), 0, Math.max(0, model.getWidth() - c.getWidth()));
             double ny = clamp(snap(p.getY() - dragOffsetY), 0, Math.max(0, model.getHeight() - c.getHeight()));
@@ -215,6 +228,7 @@ public class DesignCanvas extends Pane {
                 Point2D p = sceneToLocal(e.getSceneX(), e.getSceneY());
                 resizeStartX = p.getX();
                 resizeStartY = p.getY();
+                resizeCheckpointed = false;
                 origX = selected.getX();
                 origY = selected.getY();
                 origW = selected.getWidth();
@@ -224,6 +238,10 @@ public class DesignCanvas extends Pane {
             handle.setOnMouseDragged(e -> {
                 if (selected == null) {
                     return;
+                }
+                if (!resizeCheckpointed) {
+                    checkpoint.accept(null);
+                    resizeCheckpointed = true;
                 }
                 Point2D p = sceneToLocal(e.getSceneX(), e.getSceneY());
                 resizeTo(dir, p.getX() - resizeStartX, p.getY() - resizeStartY);
@@ -290,19 +308,61 @@ public class DesignCanvas extends Pane {
         }
     }
 
+    public void copySelected() {
+        if (selected != null) {
+            copied = selected;
+        }
+    }
+
+    public void paste() {
+        if (copied == null || model == null) {
+            return;
+        }
+        checkpoint.accept(null);
+        FormComponent c = model.duplicate(copied);
+        addWrapper(c);
+        handleGroup.toFront();
+        select(c);
+        onStructureChanged.run();
+    }
+
+    public void duplicateSelected() {
+        if (selected == null) {
+            return;
+        }
+        copied = selected;
+        paste();
+    }
+
+    public void deleteSelected() {
+        if (selected == null) {
+            return;
+        }
+        checkpoint.accept(null);
+        model.remove(selected);
+        Pane wrapper = wrappers.remove(selected);
+        getChildren().remove(wrapper);
+        select(null);
+        onStructureChanged.run();
+    }
+
     private void handleKey(KeyEvent e) {
+        if (e.isShortcutDown()) {
+            switch (e.getCode()) {
+                case C -> copySelected();
+                case V -> paste();
+                case D -> duplicateSelected();
+                default -> { return; }
+            }
+            e.consume();
+            return;
+        }
         if (selected == null) {
             return;
         }
         double step = e.isShiftDown() ? GRID : 1;
         switch (e.getCode()) {
-            case DELETE, BACK_SPACE -> {
-                model.remove(selected);
-                Pane wrapper = wrappers.remove(selected);
-                getChildren().remove(wrapper);
-                select(null);
-                onStructureChanged.run();
-            }
+            case DELETE, BACK_SPACE -> deleteSelected();
             case LEFT -> nudge(-step, 0);
             case RIGHT -> nudge(step, 0);
             case UP -> nudge(0, -step);
@@ -313,6 +373,7 @@ public class DesignCanvas extends Pane {
     }
 
     private void nudge(double dx, double dy) {
+        checkpoint.accept("nudge:" + selected.getId());
         selected.setX(clamp(selected.getX() + dx, 0, Math.max(0, model.getWidth() - selected.getWidth())));
         selected.setY(clamp(selected.getY() + dy, 0, Math.max(0, model.getHeight() - selected.getHeight())));
         refresh(selected);

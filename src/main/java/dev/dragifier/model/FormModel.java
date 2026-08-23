@@ -8,7 +8,8 @@ public class FormModel {
     private String title = "My App";
     private double width = 640;
     private double height = 480;
-    private final List<FormComponent> components = new ArrayList<>();
+    // not final: Gson assigns it reflectively on load, which the JDK blocks for final fields
+    private List<FormComponent> components = new ArrayList<>();
 
     public FormComponent create(ComponentType type, double x, double y) {
         FormComponent c = new FormComponent();
@@ -25,6 +26,21 @@ public class FormModel {
 
     public void remove(FormComponent c) {
         components.remove(c);
+    }
+
+    /** Adds a copy of {@code src} with a fresh id, offset slightly and kept inside the form. */
+    public FormComponent duplicate(FormComponent src) {
+        double nx = Math.min(src.getX() + 16, Math.max(0, width - src.getWidth()));
+        double ny = Math.min(src.getY() + 16, Math.max(0, height - src.getHeight()));
+        FormComponent c = create(src.getType(), nx, ny);
+        c.setWidth(src.getWidth());
+        c.setHeight(src.getHeight());
+        c.setText(src.getText());
+        c.setFontSize(src.getFontSize());
+        c.setTextColor(src.getTextColor());
+        c.setBackground(src.getBackground());
+        c.getEvents().putAll(src.getEvents());
+        return c;
     }
 
     private String nextId(ComponentType type) {

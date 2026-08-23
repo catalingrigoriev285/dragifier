@@ -20,6 +20,14 @@ public final class ProjectIO {
         Files.writeString(file, GSON.toJson(model), StandardCharsets.UTF_8);
     }
 
+    public static String toJson(FormModel model) {
+        return GSON.toJson(model);
+    }
+
+    public static FormModel fromJson(String json) {
+        return GSON.fromJson(json, FormModel.class);
+    }
+
     public static FormModel load(Path file) throws IOException {
         FormModel model = GSON.fromJson(Files.readString(file, StandardCharsets.UTF_8), FormModel.class);
         if (model == null) {

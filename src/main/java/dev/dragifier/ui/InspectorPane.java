@@ -25,6 +25,7 @@ public class InspectorPane extends VBox {
 
     private Consumer<FormComponent> onComponentEdited = c -> {};
     private Runnable onFormEdited = () -> {};
+    private Runnable checkpoint = () -> {};
 
     private final Label header = new Label();
 
@@ -102,6 +103,10 @@ public class InspectorPane extends VBox {
 
     public void setOnFormEdited(Runnable onFormEdited) {
         this.onFormEdited = onFormEdited;
+    }
+
+    public void setCheckpoint(Runnable checkpoint) {
+        this.checkpoint = checkpoint;
     }
 
     public void showComponent(FormComponent c) {
@@ -217,6 +222,7 @@ public class InspectorPane extends VBox {
         if (updating || current == null) {
             return;
         }
+        checkpoint.run();
         change.run();
         onComponentEdited.accept(current);
     }
@@ -225,6 +231,7 @@ public class InspectorPane extends VBox {
         if (updating || model == null) {
             return;
         }
+        checkpoint.run();
         change.run();
         onFormEdited.run();
     }
