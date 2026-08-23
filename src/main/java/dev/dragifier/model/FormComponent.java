@@ -15,6 +15,10 @@ public class FormComponent {
     private double fontSize = 13;
     private String textColor = "#212121";
     private String background = "";
+    /** Newline-separated list entries, for ComboBox/ListView. */
+    private String items = "";
+    /** Percent 0–100, for ProgressBar. */
+    private double value = 0;
     private Map<String, String> events = new LinkedHashMap<>();
 
     public String getId() { return id; }
@@ -46,6 +50,12 @@ public class FormComponent {
 
     public String getBackground() { return background; }
     public void setBackground(String background) { this.background = background; }
+
+    public String getItems() { return items == null ? "" : items; }
+    public void setItems(String items) { this.items = items; }
+
+    public double getValue() { return value; }
+    public void setValue(double value) { this.value = value; }
 
     /** Event key → Java handler body. Missing/blank entries mean "no handler". */
     public Map<String, String> getEvents() {

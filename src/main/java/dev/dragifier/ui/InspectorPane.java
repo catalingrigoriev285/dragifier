@@ -3,9 +3,11 @@ package dev.dragifier.ui;
 import dev.dragifier.model.FormComponent;
 import dev.dragifier.model.FormModel;
 import javafx.geometry.Insets;
+import dev.dragifier.model.ComponentType;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ColorPicker;
 import javafx.scene.control.Label;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
@@ -39,6 +41,10 @@ public class InspectorPane extends VBox {
     private final ColorPicker textColorPicker = new ColorPicker();
     private final CheckBox customBg = new CheckBox("Custom background");
     private final ColorPicker bgPicker = new ColorPicker(Color.WHITE);
+    private final TextArea itemsArea = new TextArea();
+    private Label itemsLabel;
+    private final TextField valueField = new TextField();
+    private Label valueLabel;
 
     private final GridPane formGrid = new GridPane();
     private final TextField titleField = new TextField();
@@ -63,7 +69,12 @@ public class InspectorPane extends VBox {
         addRow(componentGrid, row++, "Font size", fontField);
         addRow(componentGrid, row++, "Text color", textColorPicker);
         componentGrid.add(customBg, 0, row++, 2, 1);
-        addRow(componentGrid, row, "Background", bgPicker);
+        addRow(componentGrid, row++, "Background", bgPicker);
+        itemsArea.setPrefRowCount(3);
+        itemsArea.setPrefWidth(110);
+        itemsArea.setPromptText("One item per line");
+        itemsLabel = addRow(componentGrid, row++, "Items", itemsArea);
+        valueLabel = addRow(componentGrid, row, "Value %", valueField);
 
         setupGrid(formGrid);
         addRow(formGrid, 0, "Title", titleField);
@@ -82,7 +93,7 @@ public class InspectorPane extends VBox {
         grid.setVgap(6);
     }
 
-    private void addRow(GridPane grid, int row, String labelText, javafx.scene.Node control) {
+    private Label addRow(GridPane grid, int row, String labelText, javafx.scene.Node control) {
         Label label = new Label(labelText);
         label.setMinWidth(64);
         grid.add(label, 0, row);
@@ -90,6 +101,14 @@ public class InspectorPane extends VBox {
         if (control instanceof TextField field) {
             field.setPrefWidth(110);
         }
+        return label;
+    }
+
+    private static void setRowVisible(javafx.scene.Node label, javafx.scene.Node control, boolean visible) {
+        label.setVisible(visible);
+        label.setManaged(visible);
+        control.setVisible(visible);
+        control.setManaged(visible);
     }
 
     public void setModel(FormModel model) {
@@ -124,8 +143,25 @@ public class InspectorPane extends VBox {
         customBg.setSelected(hasBg);
         bgPicker.setDisable(!hasBg);
         bgPicker.setValue(hasBg ? parseColor(c.getBackground(), Color.WHITE) : Color.WHITE);
+        boolean hasItems = c.getType() == ComponentType.COMBO_BOX || c.getType() == ComponentType.LIST_VIEW;
+        setRowVisible(itemsLabel, itemsArea, hasItems);
+        itemsArea.setText(c.getItems());
+        boolean hasValue = c.getType() == ComponentType.PROGRESS_BAR;
+        setRowVisible(valueLabel, valueField, hasValue);
+        valueField.setText(num(c.getValue()));
         componentGrid.setVisible(true);
         componentGrid.setManaged(true);
+        formGrid.setVisible(false);
+        formGrid.setManaged(false);
+        updating = false;
+    }
+
+    public void showMulti(int count) {
+        current = null;
+        updating = true;
+        header.setText(count + " components selected");
+        componentGrid.setVisible(false);
+        componentGrid.setManaged(false);
         formGrid.setVisible(false);
         formGrid.setManaged(false);
         updating = false;
@@ -171,6 +207,13 @@ public class InspectorPane extends VBox {
             }
         });
         onCommit(fontField, () -> applyNumber(fontField, FormComponent::getFontSize, (c, v) -> c.setFontSize(Math.max(6, v))));
+        itemsArea.focusedProperty().addListener((obs, was, is) -> {
+            if (!is && current != null && !itemsArea.getText().equals(current.getItems())) {
+                applyComponent(() -> current.setItems(itemsArea.getText()));
+            }
+        });
+        onCommit(valueField, () -> applyNumber(valueField, FormComponent::getValue,
+                (c, v) -> c.setValue(Math.max(0, Math.min(100, v)))));
         textColorPicker.setOnAction(e ->
                 applyComponent(() -> current.setTextColor(hex(textColorPicker.getValue()))));
         customBg.setOnAction(e -> {

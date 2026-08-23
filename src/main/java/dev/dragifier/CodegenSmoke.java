@@ -36,6 +36,18 @@ public final class CodegenSmoke {
         slider.getEvents().put("onValueChange",
                 "label1.setText(String.valueOf(newValue.intValue()));");
 
+        FormComponent combo = model.create(ComponentType.COMBO_BOX, 24, 196);
+        combo.setText("Pick one");
+        combo.setItems("Alpha\nBeta \"quoted\"\nGamma");
+        combo.getEvents().put("onAction", "label1.setText(comboBox1.getValue());");
+
+        FormComponent list = model.create(ComponentType.LIST_VIEW, 24, 240);
+        list.setItems("One\nTwo\nThree");
+        list.getEvents().put("onSelect", "label1.setText(newValue);");
+
+        FormComponent progress = model.create(ComponentType.PROGRESS_BAR, 24, 380);
+        progress.setValue(42);
+
         String source = JavaCodeGenerator.generate(model);
         System.out.println(source);
 

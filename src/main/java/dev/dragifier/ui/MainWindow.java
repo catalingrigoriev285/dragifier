@@ -52,14 +52,17 @@ public class MainWindow {
     public MainWindow(Stage stage) {
         this.stage = stage;
 
-        canvas.setOnSelect(c -> {
-            tree.select(c);
-            if (c == null) {
+        canvas.setOnSelectionChanged(sel -> {
+            tree.select(sel.isEmpty() ? null : sel.get(0));
+            if (sel.size() == 1) {
+                inspector.showComponent(sel.get(0));
+                eventEditor.showComponent(sel.get(0));
+            } else if (sel.isEmpty()) {
                 inspector.showForm();
                 eventEditor.showNone();
             } else {
-                inspector.showComponent(c);
-                eventEditor.showComponent(c);
+                inspector.showMulti(sel.size());
+                eventEditor.showNone();
             }
         });
         canvas.setOnOpenEvents(c -> eventEditor.focusCode());
@@ -140,7 +143,20 @@ public class MainWindow {
                 item("Copy", "Shortcut+C", canvas::copySelected),
                 item("Paste", "Shortcut+V", canvas::paste),
                 item("Duplicate", "Shortcut+D", canvas::duplicateSelected),
+                item("Select All", "Shortcut+A", canvas::selectAll),
                 item("Delete", "Delete", canvas::deleteSelected));
+
+        Menu arrange = new Menu("Arrange");
+        arrange.getItems().addAll(
+                item("Align Left", null, () -> canvas.align(DesignCanvas.AlignOp.LEFT)),
+                item("Align Right", null, () -> canvas.align(DesignCanvas.AlignOp.RIGHT)),
+                item("Align Top", null, () -> canvas.align(DesignCanvas.AlignOp.TOP)),
+                item("Align Bottom", null, () -> canvas.align(DesignCanvas.AlignOp.BOTTOM)),
+                new SeparatorMenuItem(),
+                item("Center Horizontally", null, () -> canvas.align(DesignCanvas.AlignOp.CENTER_H)),
+                item("Center Vertically", null, () -> canvas.align(DesignCanvas.AlignOp.CENTER_V)),
+                new SeparatorMenuItem(),
+                item("Same Size", null, () -> canvas.align(DesignCanvas.AlignOp.SAME_SIZE)));
 
         Menu project = new Menu("Project");
         project.getItems().addAll(
@@ -150,7 +166,7 @@ public class MainWindow {
                 new SeparatorMenuItem(),
                 item("Package App…", null, this::packageApp));
 
-        return new MenuBar(file, edit, project);
+        return new MenuBar(file, edit, arrange, project);
     }
 
     private ToolBar buildToolBar() {

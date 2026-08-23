@@ -13,7 +13,9 @@ public record EventSpec(String key, String displayName, String hint, Kind kind, 
         /** Wired via a handler setter, e.g. {@code setOnAction(event -> { ... })}. */
         SETTER,
         /** Wired via {@code valueProperty().addListener((obs, oldValue, newValue) -> { ... })}. */
-        VALUE_LISTENER
+        VALUE_LISTENER,
+        /** Wired via {@code getSelectionModel().selectedItemProperty().addListener(...)}. */
+        SELECTION_LISTENER
     }
 
     public static List<EventSpec> forType(ComponentType type) {
@@ -29,6 +31,16 @@ public record EventSpec(String key, String displayName, String hint, Kind kind, 
             case SLIDER -> List.of(
                     new EventSpec("onValueChange", "On value change",
                             "(obs, oldValue, newValue) -> { ... }", Kind.VALUE_LISTENER, null));
+            case COMBO_BOX -> List.of(
+                    new EventSpec("onAction", "On select", "(event) -> { ... }", Kind.SETTER, "setOnAction"));
+            case RADIO_BUTTON -> List.of(
+                    new EventSpec("onAction", "On toggle", "(event) -> { ... }", Kind.SETTER, "setOnAction"));
+            case HYPERLINK -> List.of(
+                    new EventSpec("onAction", "On click", "(event) -> { ... }", Kind.SETTER, "setOnAction"));
+            case LIST_VIEW -> List.of(
+                    new EventSpec("onSelect", "On select",
+                            "(obs, oldValue, newValue) -> { ... }", Kind.SELECTION_LISTENER, null));
+            case PROGRESS_BAR -> List.of();
         };
     }
 }

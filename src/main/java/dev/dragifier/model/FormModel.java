@@ -39,6 +39,8 @@ public class FormModel {
         c.setFontSize(src.getFontSize());
         c.setTextColor(src.getTextColor());
         c.setBackground(src.getBackground());
+        c.setItems(src.getItems());
+        c.setValue(src.getValue());
         c.getEvents().putAll(src.getEvents());
         return c;
     }

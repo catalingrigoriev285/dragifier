@@ -4,14 +4,21 @@ import dev.dragifier.model.ComponentType;
 import dev.dragifier.model.FormComponent;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.Labeled;
+import javafx.scene.control.ListView;
+import javafx.scene.control.ProgressBar;
+import javafx.scene.control.RadioButton;
 import javafx.scene.control.Slider;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputControl;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.Region;
+
+import java.util.List;
 
 /**
  * Turns a {@link FormComponent} into a live JavaFX node and keeps the node in
@@ -31,11 +38,17 @@ public final class Renderer {
             case CHECK_BOX -> new CheckBox();
             case SLIDER -> new Slider();
             case PANEL -> new Pane();
+            case COMBO_BOX -> new ComboBox<String>();
+            case LIST_VIEW -> new ListView<String>();
+            case RADIO_BUTTON -> new RadioButton();
+            case PROGRESS_BAR -> new ProgressBar(0);
+            case HYPERLINK -> new Hyperlink();
         };
         apply(node, c);
         return node;
     }
 
+    @SuppressWarnings("unchecked")
     public static void apply(Region node, FormComponent c) {
         node.setPrefSize(c.getWidth(), c.getHeight());
         node.setMinSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
@@ -44,8 +57,20 @@ public final class Renderer {
             labeled.setText(c.getText());
         } else if (node instanceof TextInputControl input) {
             input.setText(c.getText());
+        } else if (node instanceof ComboBox<?> combo) {
+            ((ComboBox<String>) combo).getItems().setAll(itemList(c));
+            ((ComboBox<String>) combo).setPromptText(c.getText());
+        } else if (node instanceof ListView<?> list) {
+            ((ListView<String>) list).getItems().setAll(itemList(c));
+        } else if (node instanceof ProgressBar bar) {
+            bar.setProgress(c.getValue() / 100.0);
         }
         node.setStyle(styleFor(c));
+    }
+
+    /** Non-blank lines of the component's items text. */
+    public static List<String> itemList(FormComponent c) {
+        return c.getItems().lines().map(String::trim).filter(s -> !s.isEmpty()).toList();
     }
 
     /** CSS style string for a component; shared with the code generator. */

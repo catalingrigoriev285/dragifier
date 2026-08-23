@@ -12,44 +12,63 @@ import javafx.scene.input.TransferMode;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.Region;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Line;
 import javafx.scene.shape.Rectangle;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * The form design surface: renders the model's components, and lets the user
- * drop new components from the palette, select, move, resize, nudge and delete them.
+ * The form design surface: renders the model's components and lets the user
+ * drop new components from the palette, select (single, Ctrl+click, marquee),
+ * move, resize, align, nudge, copy/paste and delete them. Smart alignment
+ * guides appear while dragging when edges or centers line up.
  */
 public class DesignCanvas extends Pane {
 
     private static final double GRID = 8;
+    private static final double GUIDE_SNAP = 6;
     private static final double MIN_SIZE = 16;
     private static final double HANDLE_SIZE = 8;
 
     private enum Dir { NW, N, NE, E, SE, S, SW, W }
 
+    public enum AlignOp { LEFT, RIGHT, TOP, BOTTOM, CENTER_H, CENTER_V, SAME_SIZE }
+
     private FormModel model;
     private final Map<FormComponent, Pane> wrappers = new LinkedHashMap<>();
-    private FormComponent selected;
+    private final LinkedHashSet<FormComponent> selection = new LinkedHashSet<>();
     private final Group handleGroup = new Group();
+    private final Line vGuide = new Line();
+    private final Line hGuide = new Line();
+    private final Rectangle marquee = new Rectangle();
 
-    private Consumer<FormComponent> onSelect = c -> {};
+    private Consumer<List<FormComponent>> onSelectionChanged = sel -> {};
     private Consumer<FormComponent> onGeometryChanged = c -> {};
     private Runnable onStructureChanged = () -> {};
     private Consumer<FormComponent> onOpenEvents = c -> {};
     private Consumer<String> checkpoint = tag -> {};
 
-    private FormComponent copied;
-    private double dragOffsetX;
-    private double dragOffsetY;
+    private List<FormComponent> copied = List.of();
+
+    // move drag state
+    private Point2D pressPoint;
+    private final Map<FormComponent, Point2D> dragOrigins = new HashMap<>();
+    private boolean groupMoved;
     private boolean moveCheckpointed;
-    private boolean resizeCheckpointed;
 
     // resize drag state
     private double resizeStartX, resizeStartY;
     private double origX, origY, origW, origH;
+    private boolean resizeCheckpointed;
+
+    // marquee state
+    private Point2D marqueeAnchor;
 
     public DesignCanvas() {
         setStyle("-fx-background-color: white; -fx-border-color: #9e9e9e;");
@@ -57,11 +76,58 @@ public class DesignCanvas extends Pane {
         handleGroup.setVisible(false);
         createHandles();
 
+        for (Line guide : List.of(vGuide, hGuide)) {
+            guide.setStroke(Color.web("#f43f5e"));
+            guide.getStrokeDashArray().setAll(4.0, 4.0);
+            guide.setMouseTransparent(true);
+            guide.setVisible(false);
+        }
+        marquee.setFill(Color.web("#3b82f6", 0.08));
+        marquee.setStroke(Color.web("#3b82f6"));
+        marquee.setMouseTransparent(true);
+        marquee.setVisible(false);
+
         setOnMousePressed(e -> {
             if (e.getTarget() == this) {
-                select(null);
+                requestFocus();
+                marqueeAnchor = new Point2D(e.getX(), e.getY());
+                if (!e.isShortcutDown()) {
+                    setSelection(List.of());
+                }
             }
-            requestFocus();
+        });
+        setOnMouseDragged(e -> {
+            if (marqueeAnchor == null) {
+                return;
+            }
+            double x = Math.min(marqueeAnchor.getX(), e.getX());
+            double y = Math.min(marqueeAnchor.getY(), e.getY());
+            marquee.setX(x);
+            marquee.setY(y);
+            marquee.setWidth(Math.abs(e.getX() - marqueeAnchor.getX()));
+            marquee.setHeight(Math.abs(e.getY() - marqueeAnchor.getY()));
+            marquee.setVisible(true);
+            marquee.toFront();
+        });
+        setOnMouseReleased(e -> {
+            if (marqueeAnchor != null && marquee.isVisible()) {
+                List<FormComponent> hit = new ArrayList<>();
+                if (e.isShortcutDown()) {
+                    hit.addAll(selection);
+                }
+                for (FormComponent c : model.getComponents()) {
+                    boolean intersects = c.getX() < marquee.getX() + marquee.getWidth()
+                            && c.getX() + c.getWidth() > marquee.getX()
+                            && c.getY() < marquee.getY() + marquee.getHeight()
+                            && c.getY() + c.getHeight() > marquee.getY();
+                    if (intersects && !hit.contains(c)) {
+                        hit.add(c);
+                    }
+                }
+                setSelection(hit);
+            }
+            marquee.setVisible(false);
+            marqueeAnchor = null;
         });
         setOnKeyPressed(this::handleKey);
 
@@ -79,7 +145,7 @@ public class DesignCanvas extends Pane {
                 checkpoint.accept(null);
                 FormComponent c = model.create(type, x, y);
                 addWrapper(c);
-                handleGroup.toFront();
+                overlaysToFront();
                 select(c);
                 onStructureChanged.run();
                 e.setDropCompleted(true);
@@ -111,13 +177,16 @@ public class DesignCanvas extends Pane {
         }
     }
 
-    public void setOnSelect(Consumer<FormComponent> onSelect) { this.onSelect = onSelect; }
+    public void setOnSelectionChanged(Consumer<List<FormComponent>> onSelectionChanged) { this.onSelectionChanged = onSelectionChanged; }
     public void setOnGeometryChanged(Consumer<FormComponent> onGeometryChanged) { this.onGeometryChanged = onGeometryChanged; }
     public void setOnStructureChanged(Runnable onStructureChanged) { this.onStructureChanged = onStructureChanged; }
     public void setOnOpenEvents(Consumer<FormComponent> onOpenEvents) { this.onOpenEvents = onOpenEvents; }
     public void setOnCheckpoint(Consumer<String> checkpoint) { this.checkpoint = checkpoint; }
 
-    public FormComponent getSelected() { return selected; }
+    /** The primary (first-selected) component, or null. */
+    public FormComponent getSelected() {
+        return selection.isEmpty() ? null : selection.iterator().next();
+    }
 
     public void setModel(FormModel model) {
         this.model = model;
@@ -133,13 +202,13 @@ public class DesignCanvas extends Pane {
     public void rebuild() {
         getChildren().clear();
         wrappers.clear();
-        selected = null;
+        selection.clear();
         applyFormSize();
         for (FormComponent c : model.getComponents()) {
             addWrapper(c);
         }
-        getChildren().add(handleGroup);
-        select(null);
+        getChildren().addAll(vGuide, hGuide, marquee, handleGroup);
+        setSelection(List.of());
     }
 
     /** Re-applies model state (geometry and visual properties) to a component's node. */
@@ -151,25 +220,76 @@ public class DesignCanvas extends Pane {
         Region node = (Region) wrapper.getChildren().get(0);
         Renderer.apply(node, c);
         positionWrapper(c, wrapper);
-        if (c == selected) {
+        if (c == getSelected()) {
             layoutHandles();
         }
     }
 
+    /** Single-select (or clear with null). */
     public void select(FormComponent c) {
-        selected = c;
+        setSelection(c == null ? List.of() : List.of(c));
+    }
+
+    public void setSelection(List<FormComponent> components) {
+        selection.clear();
+        for (FormComponent c : components) {
+            if (wrappers.containsKey(c)) {
+                selection.add(c);
+            }
+        }
         for (Map.Entry<FormComponent, Pane> entry : wrappers.entrySet()) {
-            boolean isSelected = entry.getKey() == c;
-            entry.getValue().setStyle(isSelected
+            entry.getValue().setStyle(selection.contains(entry.getKey())
                     ? "-fx-border-color: #3b82f6; -fx-border-width: 1;"
                     : "");
         }
-        handleGroup.setVisible(c != null);
-        if (c != null) {
+        handleGroup.setVisible(selection.size() == 1);
+        if (selection.size() == 1) {
             layoutHandles();
-            handleGroup.toFront();
         }
-        onSelect.accept(c);
+        overlaysToFront();
+        onSelectionChanged.accept(List.copyOf(selection));
+    }
+
+    private void toggleSelect(FormComponent c) {
+        List<FormComponent> next = new ArrayList<>(selection);
+        if (!next.remove(c)) {
+            next.add(c);
+        }
+        setSelection(next);
+    }
+
+    private void overlaysToFront() {
+        vGuide.toFront();
+        hGuide.toFront();
+        marquee.toFront();
+        handleGroup.toFront();
+    }
+
+    public void align(AlignOp op) {
+        if (selection.size() < 2) {
+            return;
+        }
+        checkpoint.accept(null);
+        FormComponent anchor = getSelected();
+        for (FormComponent c : selection) {
+            if (c == anchor) {
+                continue;
+            }
+            switch (op) {
+                case LEFT -> c.setX(anchor.getX());
+                case RIGHT -> c.setX(anchor.getX() + anchor.getWidth() - c.getWidth());
+                case TOP -> c.setY(anchor.getY());
+                case BOTTOM -> c.setY(anchor.getY() + anchor.getHeight() - c.getHeight());
+                case CENTER_H -> c.setX(anchor.getX() + (anchor.getWidth() - c.getWidth()) / 2);
+                case CENTER_V -> c.setY(anchor.getY() + (anchor.getHeight() - c.getHeight()) / 2);
+                case SAME_SIZE -> {
+                    c.setWidth(anchor.getWidth());
+                    c.setHeight(anchor.getHeight());
+                }
+            }
+            refresh(c);
+        }
+        onGeometryChanged.accept(anchor);
     }
 
     private void addWrapper(FormComponent c) {
@@ -180,34 +300,172 @@ public class DesignCanvas extends Pane {
         positionWrapper(c, wrapper);
 
         wrapper.setOnMousePressed(e -> {
-            select(c);
-            dragOffsetX = e.getX();
-            dragOffsetY = e.getY();
-            moveCheckpointed = false;
             requestFocus();
+            if (e.isShortcutDown()) {
+                toggleSelect(c);
+            } else if (!selection.contains(c)) {
+                select(c);
+            }
+            pressPoint = sceneToLocal(e.getSceneX(), e.getSceneY());
+            dragOrigins.clear();
+            for (FormComponent s : selection) {
+                dragOrigins.put(s, new Point2D(s.getX(), s.getY()));
+            }
+            groupMoved = false;
+            moveCheckpointed = false;
             if (e.getClickCount() == 2) {
                 onOpenEvents.accept(c);
             }
             e.consume();
         });
         wrapper.setOnMouseDragged(e -> {
+            if (pressPoint == null || !selection.contains(c)) {
+                return;
+            }
             if (!moveCheckpointed) {
                 checkpoint.accept(null);
                 moveCheckpointed = true;
             }
+            groupMoved = true;
             Point2D p = sceneToLocal(e.getSceneX(), e.getSceneY());
-            double nx = clamp(snap(p.getX() - dragOffsetX), 0, Math.max(0, model.getWidth() - c.getWidth()));
-            double ny = clamp(snap(p.getY() - dragOffsetY), 0, Math.max(0, model.getHeight() - c.getHeight()));
-            c.setX(nx);
-            c.setY(ny);
-            positionWrapper(c, wrapper);
-            layoutHandles();
-            onGeometryChanged.accept(c);
+            moveSelection(c, p.getX() - pressPoint.getX(), p.getY() - pressPoint.getY());
+            e.consume();
+        });
+        wrapper.setOnMouseReleased(e -> {
+            vGuide.setVisible(false);
+            hGuide.setVisible(false);
+            if (!groupMoved && !e.isShortcutDown() && selection.size() > 1) {
+                select(c);
+            }
             e.consume();
         });
 
         wrappers.put(c, wrapper);
         getChildren().add(wrapper);
+    }
+
+    /** Moves the whole selection by a delta anchored on the dragged component, with guide/grid snapping. */
+    private void moveSelection(FormComponent dragged, double dx, double dy) {
+        Point2D origin = dragOrigins.get(dragged);
+        if (origin == null) {
+            return;
+        }
+        double rawX = origin.getX() + dx;
+        double rawY = origin.getY() + dy;
+
+        Double guideX = findGuide(rawX, dragged.getWidth(), true);
+        Double guideY = findGuide(rawY, dragged.getHeight(), false);
+        double nx = guideX != null ? guideX : snap(rawX);
+        double ny = guideY != null ? guideY : snap(rawY);
+
+        // clamp the shared delta so every selected component stays inside the form
+        double adx = nx - origin.getX();
+        double ady = ny - origin.getY();
+        for (FormComponent s : selection) {
+            Point2D so = dragOrigins.get(s);
+            if (so == null) {
+                continue;
+            }
+            adx = clamp(adx, -so.getX(), Math.max(-so.getX(), model.getWidth() - s.getWidth() - so.getX()));
+            ady = clamp(ady, -so.getY(), Math.max(-so.getY(), model.getHeight() - s.getHeight() - so.getY()));
+        }
+        for (FormComponent s : selection) {
+            Point2D so = dragOrigins.get(s);
+            if (so == null) {
+                continue;
+            }
+            s.setX(so.getX() + adx);
+            s.setY(so.getY() + ady);
+            positionWrapper(s, wrappers.get(s));
+        }
+        if (selection.size() == 1) {
+            layoutHandles();
+        }
+        showGuides(dragged, guideX != null && adx == nx - origin.getX(),
+                guideY != null && ady == ny - origin.getY());
+        onGeometryChanged.accept(dragged);
+    }
+
+    /**
+     * Finds the nearest alignment guide for the dragged component's edge/center
+     * positions. Returns the snapped coordinate, or null when no guide is close.
+     */
+    private Double findGuide(double raw, double size, boolean horizontalAxis) {
+        List<Double> candidates = new ArrayList<>();
+        for (FormComponent other : model.getComponents()) {
+            if (selection.contains(other)) {
+                continue;
+            }
+            double pos = horizontalAxis ? other.getX() : other.getY();
+            double extent = horizontalAxis ? other.getWidth() : other.getHeight();
+            candidates.add(pos);
+            candidates.add(pos + extent / 2);
+            candidates.add(pos + extent);
+        }
+        candidates.add((horizontalAxis ? model.getWidth() : model.getHeight()) / 2);
+
+        double[] offsets = {0, size / 2, size};
+        Double best = null;
+        double bestDist = GUIDE_SNAP + 1;
+        for (double cand : candidates) {
+            for (double off : offsets) {
+                double dist = Math.abs(cand - (raw + off));
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = cand - off;
+                }
+            }
+        }
+        return best;
+    }
+
+    private void showGuides(FormComponent dragged, boolean showV, boolean showH) {
+        vGuide.setVisible(showV);
+        hGuide.setVisible(showH);
+        if (showV) {
+            // the guide line sits at whichever dragged edge/center matched
+            double x = nearestEdge(dragged.getX(), dragged.getWidth(), true);
+            vGuide.setStartX(x);
+            vGuide.setEndX(x);
+            vGuide.setStartY(0);
+            vGuide.setEndY(model.getHeight());
+        }
+        if (showH) {
+            double y = nearestEdge(dragged.getY(), dragged.getHeight(), false);
+            hGuide.setStartY(y);
+            hGuide.setEndY(y);
+            hGuide.setStartX(0);
+            hGuide.setEndX(model.getWidth());
+        }
+        overlaysToFront();
+    }
+
+    /** Which of the dragged component's edges/center actually aligned with a candidate. */
+    private double nearestEdge(double pos, double size, boolean horizontalAxis) {
+        List<Double> candidates = new ArrayList<>();
+        for (FormComponent other : model.getComponents()) {
+            if (selection.contains(other)) {
+                continue;
+            }
+            double p = horizontalAxis ? other.getX() : other.getY();
+            double extent = horizontalAxis ? other.getWidth() : other.getHeight();
+            candidates.add(p);
+            candidates.add(p + extent / 2);
+            candidates.add(p + extent);
+        }
+        candidates.add((horizontalAxis ? model.getWidth() : model.getHeight()) / 2);
+        double bestEdge = pos;
+        double bestDist = Double.MAX_VALUE;
+        for (double cand : candidates) {
+            for (double edge : new double[]{pos, pos + size / 2, pos + size}) {
+                double dist = Math.abs(cand - edge);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestEdge = cand;
+                }
+            }
+        }
+        return bestEdge;
     }
 
     private void positionWrapper(FormComponent c, Pane wrapper) {
@@ -225,18 +483,22 @@ public class DesignCanvas extends Pane {
             handle.setStrokeWidth(1);
             handle.setCursor(cursorFor(dir));
             handle.setOnMousePressed(e -> {
+                FormComponent sel = getSelected();
+                if (sel == null) {
+                    return;
+                }
                 Point2D p = sceneToLocal(e.getSceneX(), e.getSceneY());
                 resizeStartX = p.getX();
                 resizeStartY = p.getY();
                 resizeCheckpointed = false;
-                origX = selected.getX();
-                origY = selected.getY();
-                origW = selected.getWidth();
-                origH = selected.getHeight();
+                origX = sel.getX();
+                origY = sel.getY();
+                origW = sel.getWidth();
+                origH = sel.getHeight();
                 e.consume();
             });
             handle.setOnMouseDragged(e -> {
-                if (selected == null) {
+                if (selection.size() != 1) {
                     return;
                 }
                 if (!resizeCheckpointed) {
@@ -252,6 +514,7 @@ public class DesignCanvas extends Pane {
     }
 
     private void resizeTo(Dir dir, double dx, double dy) {
+        FormComponent sel = getSelected();
         double nx = origX, ny = origY, nw = origW, nh = origH;
         boolean west = dir == Dir.NW || dir == Dir.W || dir == Dir.SW;
         boolean east = dir == Dir.NE || dir == Dir.E || dir == Dir.SE;
@@ -275,20 +538,21 @@ public class DesignCanvas extends Pane {
             nh = Math.min(nh, model.getHeight() - origY);
         }
 
-        selected.setX(nx);
-        selected.setY(ny);
-        selected.setWidth(nw);
-        selected.setHeight(nh);
-        refresh(selected);
-        onGeometryChanged.accept(selected);
+        sel.setX(nx);
+        sel.setY(ny);
+        sel.setWidth(nw);
+        sel.setHeight(nh);
+        refresh(sel);
+        onGeometryChanged.accept(sel);
     }
 
     private void layoutHandles() {
-        if (selected == null) {
+        FormComponent sel = getSelected();
+        if (sel == null) {
             return;
         }
-        double x = selected.getX(), y = selected.getY();
-        double w = selected.getWidth(), h = selected.getHeight();
+        double x = sel.getX(), y = sel.getY();
+        double w = sel.getWidth(), h = sel.getHeight();
         double half = HANDLE_SIZE / 2;
         int i = 0;
         for (Dir dir : Dir.values()) {
@@ -309,41 +573,50 @@ public class DesignCanvas extends Pane {
     }
 
     public void copySelected() {
-        if (selected != null) {
-            copied = selected;
+        if (!selection.isEmpty()) {
+            copied = List.copyOf(selection);
         }
     }
 
     public void paste() {
-        if (copied == null || model == null) {
+        if (copied.isEmpty() || model == null) {
             return;
         }
         checkpoint.accept(null);
-        FormComponent c = model.duplicate(copied);
-        addWrapper(c);
-        handleGroup.toFront();
-        select(c);
+        List<FormComponent> pasted = new ArrayList<>();
+        for (FormComponent src : copied) {
+            FormComponent c = model.duplicate(src);
+            addWrapper(c);
+            pasted.add(c);
+        }
+        overlaysToFront();
+        setSelection(pasted);
         onStructureChanged.run();
     }
 
     public void duplicateSelected() {
-        if (selected == null) {
+        if (selection.isEmpty()) {
             return;
         }
-        copied = selected;
+        copied = List.copyOf(selection);
         paste();
     }
 
     public void deleteSelected() {
-        if (selected == null) {
+        if (selection.isEmpty()) {
             return;
         }
         checkpoint.accept(null);
-        model.remove(selected);
-        Pane wrapper = wrappers.remove(selected);
-        getChildren().remove(wrapper);
-        select(null);
+        for (FormComponent c : List.copyOf(selection)) {
+            model.remove(c);
+            getChildren().remove(wrappers.remove(c));
+        }
+        setSelection(List.of());
         onStructureChanged.run();
+    }
+
+    public void selectAll() {
+        setSelection(List.copyOf(model.getComponents()));
     }
 
     private void handleKey(KeyEvent e) {
@@ -352,12 +625,13 @@ public class DesignCanvas extends Pane {
                 case C -> copySelected();
                 case V -> paste();
                 case D -> duplicateSelected();
+                case A -> selectAll();
                 default -> { return; }
             }
             e.consume();
             return;
         }
-        if (selected == null) {
+        if (selection.isEmpty()) {
             return;
         }
         double step = e.isShiftDown() ? GRID : 1;
@@ -373,11 +647,22 @@ public class DesignCanvas extends Pane {
     }
 
     private void nudge(double dx, double dy) {
-        checkpoint.accept("nudge:" + selected.getId());
-        selected.setX(clamp(selected.getX() + dx, 0, Math.max(0, model.getWidth() - selected.getWidth())));
-        selected.setY(clamp(selected.getY() + dy, 0, Math.max(0, model.getHeight() - selected.getHeight())));
-        refresh(selected);
-        onGeometryChanged.accept(selected);
+        FormComponent primary = getSelected();
+        checkpoint.accept("nudge:" + primary.getId());
+        // clamp the shared delta so the whole selection stays inside the form
+        for (FormComponent s : selection) {
+            dx = clamp(dx, -s.getX(), Math.max(-s.getX(), model.getWidth() - s.getWidth() - s.getX()));
+            dy = clamp(dy, -s.getY(), Math.max(-s.getY(), model.getHeight() - s.getHeight() - s.getY()));
+        }
+        for (FormComponent s : selection) {
+            s.setX(s.getX() + dx);
+            s.setY(s.getY() + dy);
+            positionWrapper(s, wrappers.get(s));
+        }
+        if (selection.size() == 1) {
+            layoutHandles();
+        }
+        onGeometryChanged.accept(primary);
     }
 
     private Cursor cursorFor(Dir dir) {

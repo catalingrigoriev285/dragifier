@@ -12,7 +12,8 @@ gradlew run
 
 ## What works (milestone 1)
 
-- **Palette → canvas drag and drop**: Button, Label, TextField, TextArea, CheckBox, Slider, Panel
+- **Palette → canvas drag and drop**: Button, Label, TextField, TextArea, CheckBox, Slider,
+  Panel, ComboBox, ListView, RadioButton, ProgressBar, Hyperlink
 - **Visual designer**: click to select, drag to move (8 px grid snap), 8 resize handles,
   arrow keys to nudge (Shift = grid step), Delete to remove
 - **Properties inspector**: position/size, text, font size, text color, custom background;
@@ -48,11 +49,27 @@ gradlew run
   runtime, runnable on machines with no Java installed.
 - `gradlew packageSmoke` — headless check of the full compile → jar → jpackage pipeline
 
+## What works (milestone 5)
+
+- **Multi-select**: Ctrl+click to add/remove, drag a marquee on empty canvas, Ctrl+A for all.
+  Group drag, nudge, delete, copy/paste and duplicate all operate on the whole selection.
+- **Smart alignment guides**: while dragging, dashed guides appear when edges or centers
+  line up with other components or the form's center, and the drag snaps to them.
+- **Arrange menu**: align left/right/top/bottom, center horizontally/vertically, same size —
+  anchored on the first-selected component.
+
+## What works (milestone 6)
+
+- **More components**: ComboBox, ListView, RadioButton, ProgressBar, Hyperlink — with
+  per-type properties (an "Items" list for ComboBox/ListView, a progress value) and
+  events ("On select" for ComboBox/ListView, "On toggle"/"On click" for the rest).
+
 ## Roadmap
 
-- Multi-select and alignment guides
-- More components (ImageView, ComboBox, ListView, menus) and per-type properties
-- Multiple forms per project, `jpackage`-based packaging into native installers
+- ImageView with a proper asset pipeline (images bundled into packaged apps)
+- Multiple forms per project
+- Installer output (`.msi`/`.exe` setup) for machines with the WiX toolset
+- Syntax-highlighted code editor (RichTextFX)
 
 ## Project layout
 

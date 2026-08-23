@@ -56,6 +56,7 @@ public final class JavaCodeGenerator {
                 out.append("        ").append(var).append(".setText(\"")
                    .append(escape(c.getText())).append("\");\n");
             }
+            appendTypeSpecific(out, c);
             out.append("        ").append(var).append(".setLayoutX(").append(fmt(c.getX())).append(");\n");
             out.append("        ").append(var).append(".setLayoutY(").append(fmt(c.getY())).append(");\n");
             out.append("        ").append(var).append(".setPrefSize(").append(fmt(c.getWidth()))
@@ -78,6 +79,32 @@ public final class JavaCodeGenerator {
         return out.toString();
     }
 
+    private static void appendTypeSpecific(StringBuilder out, FormComponent c) {
+        String var = c.getId();
+        switch (c.getType()) {
+            case COMBO_BOX, LIST_VIEW -> {
+                var items = dev.dragifier.ui.Renderer.itemList(c);
+                if (!items.isEmpty()) {
+                    out.append("        ").append(var).append(".getItems().addAll(");
+                    for (int i = 0; i < items.size(); i++) {
+                        if (i > 0) {
+                            out.append(", ");
+                        }
+                        out.append("\"").append(escape(items.get(i))).append("\"");
+                    }
+                    out.append(");\n");
+                }
+                if (c.getType() == dev.dragifier.model.ComponentType.COMBO_BOX && !c.getText().isEmpty()) {
+                    out.append("        ").append(var).append(".setPromptText(\"")
+                       .append(escape(c.getText())).append("\");\n");
+                }
+            }
+            case PROGRESS_BAR -> out.append("        ").append(var).append(".setProgress(")
+                    .append(c.getValue() / 100.0).append(");\n");
+            default -> { }
+        }
+    }
+
     private static void appendEvents(StringBuilder out, FormComponent c) {
         for (EventSpec spec : EventSpec.forType(c.getType())) {
             String code = c.getEvents().get(spec.key());
@@ -85,11 +112,12 @@ public final class JavaCodeGenerator {
                 continue;
             }
             String var = c.getId();
-            if (spec.kind() == EventSpec.Kind.SETTER) {
-                out.append("        ").append(var).append(".").append(spec.setter()).append("(event -> {\n");
-            } else {
-                out.append("        ").append(var)
-                   .append(".valueProperty().addListener((obs, oldValue, newValue) -> {\n");
+            switch (spec.kind()) {
+                case SETTER -> out.append("        ").append(var).append(".").append(spec.setter()).append("(event -> {\n");
+                case VALUE_LISTENER -> out.append("        ").append(var)
+                        .append(".valueProperty().addListener((obs, oldValue, newValue) -> {\n");
+                case SELECTION_LISTENER -> out.append("        ").append(var)
+                        .append(".getSelectionModel().selectedItemProperty().addListener((obs, oldValue, newValue) -> {\n");
             }
             for (String line : code.split("\n", -1)) {
                 out.append("            ").append(line.stripTrailing()).append("\n");
@@ -107,13 +135,18 @@ public final class JavaCodeGenerator {
             case CHECK_BOX -> "CheckBox";
             case SLIDER -> "Slider";
             case PANEL -> "Pane";
+            case COMBO_BOX -> "ComboBox<String>";
+            case LIST_VIEW -> "ListView<String>";
+            case RADIO_BUTTON -> "RadioButton";
+            case PROGRESS_BAR -> "ProgressBar";
+            case HYPERLINK -> "Hyperlink";
         };
     }
 
     private static boolean hasText(FormComponent c) {
         return switch (c.getType()) {
-            case BUTTON, LABEL, TEXT_FIELD, TEXT_AREA, CHECK_BOX -> true;
-            case SLIDER, PANEL -> false;
+            case BUTTON, LABEL, TEXT_FIELD, TEXT_AREA, CHECK_BOX, RADIO_BUTTON, HYPERLINK -> true;
+            case SLIDER, PANEL, COMBO_BOX, LIST_VIEW, PROGRESS_BAR -> false;
         };
     }
 

@@ -8,7 +8,12 @@ public enum ComponentType {
     TEXT_AREA("TextArea", "textArea", 220, 110, ""),
     CHECK_BOX("CheckBox", "checkBox", 110, 24, "CheckBox"),
     SLIDER("Slider", "slider", 160, 24, ""),
-    PANEL("Panel", "panel", 220, 150, "");
+    PANEL("Panel", "panel", 220, 150, ""),
+    COMBO_BOX("ComboBox", "comboBox", 160, 28, ""),
+    LIST_VIEW("ListView", "listView", 180, 120, ""),
+    RADIO_BUTTON("RadioButton", "radioButton", 110, 24, "RadioButton"),
+    PROGRESS_BAR("ProgressBar", "progressBar", 160, 20, ""),
+    HYPERLINK("Hyperlink", "hyperlink", 100, 24, "Hyperlink");
 
     public final String displayName;
     public final String idPrefix;
