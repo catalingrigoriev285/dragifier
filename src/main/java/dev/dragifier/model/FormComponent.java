@@ -21,6 +21,8 @@ public class FormComponent {
     private double value = 0;
     /** Base64-encoded image bytes, for Image components. Kept in the project file. */
     private String imageData = "";
+    private String tooltip = "";
+    private boolean disabled = false;
     private Map<String, String> events = new LinkedHashMap<>();
 
     public String getId() { return id; }
@@ -61,6 +63,12 @@ public class FormComponent {
 
     public String getImageData() { return imageData == null ? "" : imageData; }
     public void setImageData(String imageData) { this.imageData = imageData; }
+
+    public String getTooltip() { return tooltip == null ? "" : tooltip; }
+    public void setTooltip(String tooltip) { this.tooltip = tooltip; }
+
+    public boolean isDisabled() { return disabled; }
+    public void setDisabled(boolean disabled) { this.disabled = disabled; }
 
     /** Event key → Java handler body. Missing/blank entries mean "no handler". */
     public Map<String, String> getEvents() {

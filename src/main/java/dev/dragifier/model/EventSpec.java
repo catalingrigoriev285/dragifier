@@ -18,6 +18,11 @@ public record EventSpec(String key, String displayName, String hint, Kind kind, 
         SELECTION_LISTENER
     }
 
+    /** Events of the form itself (edited when nothing is selected). */
+    public static List<EventSpec> forForm() {
+        return List.of(new EventSpec("onShown", "On show", "(event) -> { ... }", Kind.SETTER, "setOnShown"));
+    }
+
     public static List<EventSpec> forType(ComponentType type) {
         return switch (type) {
             case BUTTON -> List.of(

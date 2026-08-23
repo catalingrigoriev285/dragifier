@@ -31,13 +31,24 @@ public final class PackageSmoke {
         Path dest = args.length > 0
                 ? Path.of(args[0])
                 : Files.createTempDirectory("dragifier-package-smoke");
-        Path exe = AppPackager.packageSync(project, dest, s -> System.out.println("  " + s));
+        Path exe = AppPackager.packageSync(project, dest, AppPackager.OutputType.APP_IMAGE,
+                s -> System.out.println("  " + s));
 
         if (Files.exists(exe)) {
             System.out.println("PACKAGE SMOKE OK: " + exe + " (" + Files.size(exe) + " bytes)");
         } else {
             System.err.println("PACKAGE SMOKE FAILED: launcher not found at " + exe);
             System.exit(1);
+        }
+
+        // informational: try the installer type; succeeds only where WiX is installed
+        try {
+            Path installer = AppPackager.packageSync(project, dest, AppPackager.OutputType.INSTALLER,
+                    s -> System.out.println("  " + s));
+            System.out.println("INSTALLER OK: " + installer);
+        } catch (Exception ex) {
+            String msg = String.valueOf(ex.getMessage());
+            System.out.println("INSTALLER SKIPPED: " + msg.lines().reduce((a, b) -> b).orElse(msg));
         }
     }
 }

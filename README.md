@@ -79,9 +79,29 @@ gradlew run
   `Stage` subclass, so opening another form from an event handler is plain Java:
   `new Form2().show();`. Old single-form project files load transparently.
 
+## What works (milestone 9)
+
+- **Syntax-highlighted code editor**: the event code pane is a RichTextFX `CodeArea`
+  with Java keyword/string/comment/number highlighting and line numbers.
+
+## What works (milestone 10)
+
+- **Package Installer (.exe)…**: produces a Windows setup wizard (with Start-menu entry
+  and shortcut) via jpackage. Requires the [WiX toolset](https://wixtoolset.org)
+  (`dotnet tool install --global wix`); without it, a clear error explains what to install.
+  Both packaging actions now offer to open the output folder when done.
+
+## What works (milestone 11)
+
+- **Tooltip and Disabled** properties on every component (rendered live in the designer,
+  emitted in generated code).
+- **Form "On show" event**: with nothing selected, the event pane edits the form's own
+  events — code runs when the window opens.
+- **Canvas zoom**: 50–200% zoom combo in the toolbar; all editing works while zoomed.
+
 ## Roadmap
-- Installer output (`.msi`/`.exe` setup) for machines with the WiX toolset
-- Syntax-highlighted code editor (RichTextFX)
+
+- Ideas: text alignment property, canvas rulers, project templates, localization
 
 ## Project layout
 

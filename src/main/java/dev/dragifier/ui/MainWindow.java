@@ -63,7 +63,7 @@ public class MainWindow {
                 eventEditor.showComponent(sel.get(0));
             } else if (sel.isEmpty()) {
                 inspector.showForm();
-                eventEditor.showNone();
+                eventEditor.showForm(model);
             } else {
                 inspector.showMulti(sel.size());
                 eventEditor.showNone();
@@ -107,7 +107,8 @@ public class MainWindow {
         root.setLeft(left);
         root.setRight(inspector);
 
-        StackPane canvasHolder = new StackPane(canvas);
+        // Group so the canvas's zoom transform is included in layout bounds
+        StackPane canvasHolder = new StackPane(new javafx.scene.Group(canvas));
         canvasHolder.setPadding(new Insets(24));
         canvasHolder.setStyle("-fx-background-color: #e4e4e4;");
         ScrollPane scroll = new ScrollPane(canvasHolder);
@@ -138,7 +139,7 @@ public class MainWindow {
         inspector.setModel(model);
         tree.setModel(model);
         inspector.showForm();
-        eventEditor.showNone();
+        eventEditor.showForm(model);
     }
 
     private void refreshFormBox() {
@@ -187,7 +188,8 @@ public class MainWindow {
                 item("Quick Preview", "Shift+F5", this::preview),
                 item("Export Java Code…", "Shortcut+E", this::exportCode),
                 new SeparatorMenuItem(),
-                item("Package App…", null, this::packageApp));
+                item("Package App…", null, () -> packageTo(AppPackager.OutputType.APP_IMAGE)),
+                item("Package Installer (.exe)…", null, () -> packageTo(AppPackager.OutputType.INSTALLER)));
 
         return new MenuBar(file, edit, arrange, project);
     }
@@ -246,9 +248,30 @@ public class MainWindow {
             status.setText(model.getName() + " is now the startup form");
         });
 
+        javafx.scene.control.ComboBox<Integer> zoomBox = new javafx.scene.control.ComboBox<>();
+        zoomBox.getItems().addAll(50, 75, 100, 125, 150, 200);
+        zoomBox.setValue(100);
+        zoomBox.setConverter(new javafx.util.StringConverter<>() {
+            @Override public String toString(Integer v) {
+                return v == null ? "" : v + "%";
+            }
+            @Override public Integer fromString(String s) {
+                return null;
+            }
+        });
+        zoomBox.setOnAction(e -> {
+            Integer percent = zoomBox.getValue();
+            if (percent != null) {
+                double z = percent / 100.0;
+                canvas.getTransforms().setAll(new javafx.scene.transform.Scale(z, z));
+            }
+        });
+
         return new ToolBar(run, preview, export,
                 new javafx.scene.control.Separator(),
-                new Label("Form:"), formBox, addForm, removeForm, setMain);
+                new Label("Form:"), formBox, addForm, removeForm, setMain,
+                new javafx.scene.control.Separator(),
+                new Label("Zoom:"), zoomBox);
     }
 
     private MenuItem item(String text, String accelerator, Runnable action) {
@@ -339,14 +362,33 @@ public class MainWindow {
         PreviewWindow.show(model, stage);
     }
 
-    private void packageApp() {
+    private void packageTo(AppPackager.OutputType type) {
         DirectoryChooser chooser = new DirectoryChooser();
-        chooser.setTitle("Choose output folder for the packaged app");
+        chooser.setTitle(type == AppPackager.OutputType.INSTALLER
+                ? "Choose output folder for the installer"
+                : "Choose output folder for the packaged app");
         File dir = chooser.showDialog(stage);
         if (dir == null) {
             return;
         }
-        AppPackager.packageApp(project, dir.toPath(), status::setText, this::errorText);
+        AppPackager.packageApp(project, dir.toPath(), type, status::setText, this::errorText,
+                exe -> offerOpenFolder(exe));
+    }
+
+    private void offerOpenFolder(Path exe) {
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Packaging finished");
+        alert.setHeaderText("Packaged successfully");
+        alert.setContentText(exe + "\n\nOpen the output folder?");
+        alert.showAndWait().ifPresent(button -> {
+            if (button == javafx.scene.control.ButtonType.OK) {
+                try {
+                    new ProcessBuilder("explorer.exe", "/select,", exe.toString()).start();
+                } catch (IOException ignored) {
+                    // opening Explorer is best-effort
+                }
+            }
+        });
     }
 
     private void run() {

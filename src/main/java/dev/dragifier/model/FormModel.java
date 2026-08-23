@@ -1,7 +1,9 @@
 package dev.dragifier.model;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /** The whole form being designed: window properties plus placed components. */
 public class FormModel {
@@ -12,6 +14,7 @@ public class FormModel {
     private double height = 480;
     // not final: Gson assigns it reflectively on load, which the JDK blocks for final fields
     private List<FormComponent> components = new ArrayList<>();
+    private Map<String, String> events = new LinkedHashMap<>();
 
     public FormComponent create(ComponentType type, double x, double y) {
         FormComponent c = new FormComponent();
@@ -44,6 +47,8 @@ public class FormModel {
         c.setItems(src.getItems());
         c.setValue(src.getValue());
         c.setImageData(src.getImageData());
+        c.setTooltip(src.getTooltip());
+        c.setDisabled(src.isDisabled());
         c.getEvents().putAll(src.getEvents());
         return c;
     }
@@ -73,4 +78,12 @@ public class FormModel {
     public void setHeight(double height) { this.height = height; }
 
     public List<FormComponent> getComponents() { return components; }
+
+    /** Form-level event key → Java handler body (e.g. "onShown"). */
+    public Map<String, String> getEvents() {
+        if (events == null) {
+            events = new LinkedHashMap<>();
+        }
+        return events;
+    }
 }

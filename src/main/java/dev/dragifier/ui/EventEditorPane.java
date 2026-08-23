@@ -2,6 +2,7 @@ package dev.dragifier.ui;
 
 import dev.dragifier.model.EventSpec;
 import dev.dragifier.model.FormComponent;
+import dev.dragifier.model.FormModel;
 import javafx.geometry.Insets;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
@@ -20,7 +21,8 @@ import org.fxmisc.richtext.LineNumberFactory;
  */
 public class EventEditorPane extends VBox {
 
-    private FormComponent current;
+    private java.util.Map<String, String> currentEvents;
+    private String checkpointPrefix = "";
     private boolean updating;
     private Runnable onEdited = () -> {};
     private java.util.function.Consumer<String> checkpoint = tag -> {};
@@ -79,12 +81,24 @@ public class EventEditorPane extends VBox {
     }
 
     public void showComponent(FormComponent c) {
-        current = c;
+        showTarget("Events — " + c.getId(), EventSpec.forType(c.getType()),
+                c.getEvents(), "code:" + c.getId());
+    }
+
+    public void showForm(FormModel form) {
+        showTarget("Events — " + form.getName() + " (form)", EventSpec.forForm(),
+                form.getEvents(), "code:form:" + form.getName());
+    }
+
+    private void showTarget(String title, java.util.List<EventSpec> specs,
+                            java.util.Map<String, String> events, String prefix) {
+        currentEvents = events;
+        checkpointPrefix = prefix;
         updating = true;
-        header.setText("Events — " + c.getId());
-        eventBox.getItems().setAll(EventSpec.forType(c.getType()));
+        header.setText(title);
+        eventBox.getItems().setAll(specs);
         eventBox.getSelectionModel().selectFirst();
-        boolean hasEvents = !eventBox.getItems().isEmpty();
+        boolean hasEvents = !specs.isEmpty();
         eventBox.setDisable(!hasEvents);
         codeArea.setDisable(!hasEvents);
         updating = false;
@@ -92,7 +106,7 @@ public class EventEditorPane extends VBox {
     }
 
     public void showNone() {
-        current = null;
+        currentEvents = null;
         updating = true;
         header.setText("Events");
         eventBox.getItems().clear();
@@ -108,7 +122,7 @@ public class EventEditorPane extends VBox {
     }
 
     private void loadCode() {
-        if (current == null) {
+        if (currentEvents == null) {
             return;
         }
         EventSpec spec = eventBox.getValue();
@@ -118,24 +132,24 @@ public class EventEditorPane extends VBox {
             codeArea.replaceText("");
         } else {
             hint.setText(spec.hint());
-            codeArea.replaceText(current.getEvents().getOrDefault(spec.key(), ""));
+            codeArea.replaceText(currentEvents.getOrDefault(spec.key(), ""));
         }
         updating = false;
     }
 
     private void storeCode(String text) {
-        if (updating || current == null) {
+        if (updating || currentEvents == null) {
             return;
         }
         EventSpec spec = eventBox.getValue();
         if (spec == null) {
             return;
         }
-        checkpoint.accept("code:" + current.getId() + ":" + spec.key());
+        checkpoint.accept(checkpointPrefix + ":" + spec.key());
         if (text == null || text.isBlank()) {
-            current.getEvents().remove(spec.key());
+            currentEvents.remove(spec.key());
         } else {
-            current.getEvents().put(spec.key(), text);
+            currentEvents.put(spec.key(), text);
         }
         onEdited.run();
     }

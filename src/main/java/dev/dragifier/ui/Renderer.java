@@ -68,7 +68,26 @@ public final class Renderer {
         } else if (node instanceof ImageBox box) {
             box.update(c);
         }
+        node.setDisable(c.isDisabled());
+        applyTooltip(node, c.getTooltip());
         node.setStyle(styleFor(c));
+    }
+
+    private static void applyTooltip(Region node, String text) {
+        javafx.scene.control.Tooltip existing =
+                (javafx.scene.control.Tooltip) node.getProperties().get("dragifier.tooltip");
+        if (text.isEmpty()) {
+            if (existing != null) {
+                javafx.scene.control.Tooltip.uninstall(node, existing);
+                node.getProperties().remove("dragifier.tooltip");
+            }
+        } else if (existing == null) {
+            javafx.scene.control.Tooltip tooltip = new javafx.scene.control.Tooltip(text);
+            javafx.scene.control.Tooltip.install(node, tooltip);
+            node.getProperties().put("dragifier.tooltip", tooltip);
+        } else {
+            existing.setText(text);
+        }
     }
 
     /** Non-blank lines of the component's items text. */

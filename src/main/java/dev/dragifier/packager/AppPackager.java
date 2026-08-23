@@ -25,16 +25,34 @@ import java.util.function.Consumer;
  */
 public final class AppPackager {
 
+    /** What jpackage should produce. */
+    public enum OutputType {
+        /** A folder with a launcher exe and bundled runtime; needs nothing extra. */
+        APP_IMAGE("app-image"),
+        /** A Windows setup wizard (.exe installer); requires the WiX toolset. */
+        INSTALLER("exe");
+
+        final String jpackageType;
+
+        OutputType(String jpackageType) {
+            this.jpackageType = jpackageType;
+        }
+    }
+
     private AppPackager() {}
 
     /** Async wrapper for the UI; callbacks run on the JavaFX application thread. */
-    public static void packageApp(ProjectModel project, Path destDir,
-                                  Consumer<String> status, BiConsumer<String, String> error) {
+    public static void packageApp(ProjectModel project, Path destDir, OutputType type,
+                                  Consumer<String> status, BiConsumer<String, String> error,
+                                  Consumer<Path> onSuccess) {
         Thread thread = new Thread(() -> {
             try {
-                Path exe = packageSync(project, destDir,
+                Path exe = packageSync(project, destDir, type,
                         s -> Platform.runLater(() -> status.accept(s)));
-                Platform.runLater(() -> status.accept("Packaged: " + exe));
+                Platform.runLater(() -> {
+                    status.accept("Packaged: " + exe);
+                    onSuccess.accept(exe);
+                });
             } catch (Exception ex) {
                 Platform.runLater(() -> {
                     error.accept("Packaging failed", ex.getMessage() == null ? String.valueOf(ex) : ex.getMessage());
@@ -46,8 +64,9 @@ public final class AppPackager {
         thread.start();
     }
 
-    /** Compiles, jars and jpackages the project. Returns the path of the launcher exe. */
-    public static Path packageSync(ProjectModel project, Path destDir, Consumer<String> status) throws Exception {
+    /** Compiles, jars and jpackages the project. Returns the path of the produced exe. */
+    public static Path packageSync(ProjectModel project, Path destDir, OutputType type,
+                                   Consumer<String> status) throws Exception {
         Path jpackage = Path.of(System.getProperty("java.home"), "bin",
                 System.getProperty("os.name", "").toLowerCase().contains("win") ? "jpackage.exe" : "jpackage");
         if (!Files.exists(jpackage)) {
@@ -69,13 +88,16 @@ public final class AppPackager {
         status.accept("Packaging with jpackage (this takes a minute)…");
         List<String> cmd = new ArrayList<>(List.of(
                 jpackage.toString(),
-                "--type", "app-image",
+                "--type", type.jpackageType,
                 "--name", appName,
                 "--input", inputDir.toString(),
                 "--main-jar", "app.jar",
                 "--main-class", mainClass,
                 "--dest", destDir.toString(),
                 "--java-options", "--enable-native-access=javafx.graphics"));
+        if (type == OutputType.INSTALLER) {
+            cmd.addAll(List.of("--app-version", "1.0", "--win-shortcut", "--win-menu"));
+        }
         String modulePath = AppRunner.javafxModulePath();
         if (modulePath != null) {
             cmd.addAll(List.of("--module-path", modulePath, "--add-modules", "javafx.controls"));
@@ -84,9 +106,17 @@ public final class AppPackager {
         String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         int exit = process.waitFor();
         if (exit != 0) {
-            throw new IOException("jpackage exited with code " + exit + ":\n" + output);
+            String message = "jpackage exited with code " + exit + ":\n" + output;
+            if (output.toLowerCase().contains("wix")) {
+                message += "\n\nBuilding a Windows installer requires the WiX toolset.\n"
+                        + "Install it from https://wixtoolset.org (or: dotnet tool install --global wix),\n"
+                        + "then try again — or use Package App for a no-install app folder.";
+            }
+            throw new IOException(message);
         }
-        return destDir.resolve(appName).resolve(appName + ".exe");
+        return type == OutputType.APP_IMAGE
+                ? destDir.resolve(appName).resolve(appName + ".exe")
+                : destDir.resolve(appName + "-1.0.exe");
     }
 
     /** Jars the compiled classes into {@code <classesDir>/jar-input/app.jar} and returns the input dir. */

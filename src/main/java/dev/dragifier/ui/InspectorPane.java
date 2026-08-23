@@ -47,6 +47,8 @@ public class InspectorPane extends VBox {
     private Label valueLabel;
     private final javafx.scene.layout.HBox imageButtons = new javafx.scene.layout.HBox(6);
     private Label imageLabel;
+    private final TextField tooltipField = new TextField();
+    private final CheckBox disabledBox = new CheckBox("Disabled");
 
     private final GridPane formGrid = new GridPane();
     private final TextField nameField = new TextField();
@@ -84,7 +86,9 @@ public class InspectorPane extends VBox {
         chooseImage.setOnAction(e -> pickImage());
         clearImage.setOnAction(e -> applyComponent(() -> current.setImageData("")));
         imageButtons.getChildren().addAll(chooseImage, clearImage);
-        imageLabel = addRow(componentGrid, row, "Image", imageButtons);
+        imageLabel = addRow(componentGrid, row++, "Image", imageButtons);
+        addRow(componentGrid, row++, "Tooltip", tooltipField);
+        componentGrid.add(disabledBox, 0, row, 2, 1);
 
         setupGrid(formGrid);
         addRow(formGrid, 0, "Name", nameField);
@@ -165,6 +169,8 @@ public class InspectorPane extends VBox {
         setRowVisible(valueLabel, valueField, hasValue);
         valueField.setText(num(c.getValue()));
         setRowVisible(imageLabel, imageButtons, c.getType() == ComponentType.IMAGE_VIEW);
+        tooltipField.setText(c.getTooltip());
+        disabledBox.setSelected(c.isDisabled());
         componentGrid.setVisible(true);
         componentGrid.setManaged(true);
         formGrid.setVisible(false);
@@ -231,6 +237,13 @@ public class InspectorPane extends VBox {
         });
         onCommit(valueField, () -> applyNumber(valueField, FormComponent::getValue,
                 (c, v) -> c.setValue(Math.max(0, Math.min(100, v)))));
+        onCommit(tooltipField, () -> {
+            if (current != null && !tooltipField.getText().equals(current.getTooltip())) {
+                applyComponent(() -> current.setTooltip(tooltipField.getText()));
+            }
+        });
+        disabledBox.setOnAction(e ->
+                applyComponent(() -> current.setDisabled(disabledBox.isSelected())));
         textColorPicker.setOnAction(e ->
                 applyComponent(() -> current.setTextColor(hex(textColorPicker.getValue()))));
         customBg.setOnAction(e -> {

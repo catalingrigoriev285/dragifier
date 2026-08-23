@@ -55,6 +55,12 @@ public final class CodegenSmoke {
         image.setImageData("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==");
         image.getEvents().put("onMouseClicked", "label1.setText(\"Image clicked\");");
 
+        button.setTooltip("Greets the user");
+        slider.setDisabled(true);
+        FormComponent panel = form.create(ComponentType.PANEL, 220, 140);
+        panel.setTooltip("A panel tooltip (Tooltip.install path)");
+        form.getEvents().put("onShown", "label1.setText(\"Form shown\");");
+
         // second form, opened from the first with plain Java
         FormModel second = project.addForm();
         second.setTitle("Second Form");

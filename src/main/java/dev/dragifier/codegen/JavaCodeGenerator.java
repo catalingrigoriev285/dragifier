@@ -105,10 +105,24 @@ public final class JavaCodeGenerator {
                 out.append("        ").append(var).append(".setStyle(\"")
                    .append(escape(Renderer.styleFor(c))).append("\");\n");
             }
+            if (c.isDisabled()) {
+                out.append("        ").append(var).append(".setDisable(true);\n");
+            }
+            if (!c.getTooltip().isEmpty()) {
+                boolean isControl = c.getType() != ComponentType.PANEL && c.getType() != ComponentType.IMAGE_VIEW;
+                if (isControl) {
+                    out.append("        ").append(var).append(".setTooltip(new Tooltip(\"")
+                       .append(escape(c.getTooltip())).append("\"));\n");
+                } else {
+                    out.append("        Tooltip.install(").append(var).append(", new Tooltip(\"")
+                       .append(escape(c.getTooltip())).append("\"));\n");
+                }
+            }
             appendEvents(out, c);
             out.append("        root.getChildren().add(").append(var).append(");\n\n");
         }
 
+        appendFormEvents(out, form);
         out.append("        setTitle(\"").append(escape(form.getTitle())).append("\");\n");
         out.append("        setScene(new Scene(root));\n");
         out.append("        setResizable(false);\n");
@@ -147,6 +161,20 @@ public final class JavaCodeGenerator {
             case PROGRESS_BAR -> out.append("        ").append(var).append(".setProgress(")
                     .append(c.getValue() / 100.0).append(");\n");
             default -> { }
+        }
+    }
+
+    private static void appendFormEvents(StringBuilder out, FormModel form) {
+        for (EventSpec spec : EventSpec.forForm()) {
+            String code = form.getEvents().get(spec.key());
+            if (code == null || code.isBlank()) {
+                continue;
+            }
+            out.append("        ").append(spec.setter()).append("(event -> {\n");
+            for (String line : code.split("\n", -1)) {
+                out.append("            ").append(line.stripTrailing()).append("\n");
+            }
+            out.append("        });\n");
         }
     }
 
