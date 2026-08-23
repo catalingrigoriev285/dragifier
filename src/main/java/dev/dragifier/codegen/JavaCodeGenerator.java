@@ -1,10 +1,15 @@
 package dev.dragifier.codegen;
 
+import dev.dragifier.model.EventSpec;
 import dev.dragifier.model.FormComponent;
 import dev.dragifier.model.FormModel;
 import dev.dragifier.ui.Renderer;
 
-/** Generates a standalone JavaFX application source file from a form model. */
+/**
+ * Generates a standalone JavaFX application source file from a form model.
+ * Components are emitted as fields so event handler code can reference any
+ * component on the form by its id.
+ */
 public final class JavaCodeGenerator {
 
     private JavaCodeGenerator() {}
@@ -32,17 +37,21 @@ public final class JavaCodeGenerator {
         out.append("import javafx.scene.layout.Pane;\n");
         out.append("import javafx.stage.Stage;\n\n");
         out.append("public class ").append(cls).append(" extends Application {\n\n");
+        out.append("    private Stage stage;\n");
+        for (FormComponent c : model.getComponents()) {
+            out.append("    private ").append(javaTypeFor(c)).append(" ").append(c.getId()).append(";\n");
+        }
+        out.append("\n");
         out.append("    @Override\n");
-        out.append("    public void start(Stage stage) {\n");
+        out.append("    public void start(Stage primaryStage) {\n");
+        out.append("        this.stage = primaryStage;\n");
         out.append("        Pane root = new Pane();\n");
         out.append("        root.setPrefSize(").append(fmt(model.getWidth()))
            .append(", ").append(fmt(model.getHeight())).append(");\n\n");
 
         for (FormComponent c : model.getComponents()) {
             String var = c.getId();
-            String javaType = javaTypeFor(c);
-            out.append("        ").append(javaType).append(" ").append(var)
-               .append(" = new ").append(javaType).append("();\n");
+            out.append("        ").append(var).append(" = new ").append(javaTypeFor(c)).append("();\n");
             if (hasText(c)) {
                 out.append("        ").append(var).append(".setText(\"")
                    .append(escape(c.getText())).append("\");\n");
@@ -53,6 +62,7 @@ public final class JavaCodeGenerator {
                .append(", ").append(fmt(c.getHeight())).append(");\n");
             out.append("        ").append(var).append(".setStyle(\"")
                .append(escape(Renderer.styleFor(c))).append("\");\n");
+            appendEvents(out, c);
             out.append("        root.getChildren().add(").append(var).append(");\n\n");
         }
 
@@ -66,6 +76,26 @@ public final class JavaCodeGenerator {
         out.append("    }\n");
         out.append("}\n");
         return out.toString();
+    }
+
+    private static void appendEvents(StringBuilder out, FormComponent c) {
+        for (EventSpec spec : EventSpec.forType(c.getType())) {
+            String code = c.getEvents().get(spec.key());
+            if (code == null || code.isBlank()) {
+                continue;
+            }
+            String var = c.getId();
+            if (spec.kind() == EventSpec.Kind.SETTER) {
+                out.append("        ").append(var).append(".").append(spec.setter()).append("(event -> {\n");
+            } else {
+                out.append("        ").append(var)
+                   .append(".valueProperty().addListener((obs, oldValue, newValue) -> {\n");
+            }
+            for (String line : code.split("\n", -1)) {
+                out.append("            ").append(line.stripTrailing()).append("\n");
+            }
+            out.append("        });\n");
+        }
     }
 
     private static String javaTypeFor(FormComponent c) {

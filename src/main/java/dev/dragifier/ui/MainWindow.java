@@ -3,7 +3,9 @@ package dev.dragifier.ui;
 import dev.dragifier.codegen.JavaCodeGenerator;
 import dev.dragifier.io.ProjectIO;
 import dev.dragifier.model.FormModel;
+import dev.dragifier.runner.AppRunner;
 import javafx.geometry.Insets;
+import javafx.geometry.Orientation;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
@@ -13,6 +15,8 @@ import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SeparatorMenuItem;
+import javafx.scene.control.SplitPane;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.ToolBar;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.layout.BorderPane;
@@ -37,6 +41,7 @@ public class MainWindow {
 
     private final DesignCanvas canvas = new DesignCanvas();
     private final InspectorPane inspector = new InspectorPane();
+    private final EventEditorPane eventEditor = new EventEditorPane();
     private final Label status = new Label("Ready");
 
     public MainWindow(Stage stage) {
@@ -45,10 +50,14 @@ public class MainWindow {
         canvas.setOnSelect(c -> {
             if (c == null) {
                 inspector.showForm();
+                eventEditor.showNone();
             } else {
                 inspector.showComponent(c);
+                eventEditor.showComponent(c);
             }
         });
+        canvas.setOnOpenEvents(c -> eventEditor.focusCode());
+        eventEditor.setOnEdited(this::markDirty);
         canvas.setOnGeometryChanged(c -> {
             inspector.updateGeometry(c);
             markDirty();
@@ -76,7 +85,11 @@ public class MainWindow {
         ScrollPane scroll = new ScrollPane(canvasHolder);
         scroll.setFitToWidth(true);
         scroll.setFitToHeight(true);
-        root.setCenter(scroll);
+
+        SplitPane center = new SplitPane(scroll, eventEditor);
+        center.setOrientation(Orientation.VERTICAL);
+        center.setDividerPositions(0.72);
+        root.setCenter(center);
 
         status.setPadding(new Insets(4, 10, 4, 10));
         root.setBottom(status);
@@ -89,6 +102,7 @@ public class MainWindow {
         canvas.setModel(model);
         inspector.setModel(model);
         inspector.showForm();
+        eventEditor.showNone();
     }
 
     private MenuBar buildMenuBar() {
@@ -103,18 +117,21 @@ public class MainWindow {
 
         Menu project = new Menu("Project");
         project.getItems().addAll(
-                item("Preview", "F5", this::preview),
+                item("Run", "F5", this::run),
+                item("Quick Preview", "Shift+F5", this::preview),
                 item("Export Java Code…", "Shortcut+E", this::exportCode));
 
         return new MenuBar(file, project);
     }
 
     private ToolBar buildToolBar() {
-        Button run = new Button("▶ Preview");
-        run.setOnAction(e -> preview());
+        Button run = new Button("▶ Run");
+        run.setOnAction(e -> run());
+        Button preview = new Button("Quick Preview");
+        preview.setOnAction(e -> preview());
         Button export = new Button("Export Java");
         export.setOnAction(e -> exportCode());
-        return new ToolBar(run, export);
+        return new ToolBar(run, preview, export);
     }
 
     private MenuItem item(String text, String accelerator, Runnable action) {
@@ -200,6 +217,10 @@ public class MainWindow {
         PreviewWindow.show(model, stage);
     }
 
+    private void run() {
+        AppRunner.run(model, status::setText, this::errorText);
+    }
+
     private FileChooser projectChooser() {
         FileChooser chooser = new FileChooser();
         chooser.setTitle("Dragifier Project");
@@ -223,6 +244,18 @@ public class MainWindow {
         alert.setTitle("Error");
         alert.setHeaderText(message);
         alert.setContentText(ex.getMessage());
+        alert.showAndWait();
+    }
+
+    private void errorText(String message, String details) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle("Error");
+        alert.setHeaderText(message);
+        TextArea area = new TextArea(details);
+        area.setEditable(false);
+        area.setStyle("-fx-font-family: 'Consolas', monospace; -fx-font-size: 12px;");
+        alert.getDialogPane().setContent(area);
+        alert.setResizable(true);
         alert.showAndWait();
     }
 }

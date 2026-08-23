@@ -156,12 +156,16 @@ public class InspectorPane extends VBox {
     }
 
     private void wireComponentEdits() {
-        onCommit(xField, () -> applyNumber(xField, v -> current.setX(v)));
-        onCommit(yField, () -> applyNumber(yField, v -> current.setY(v)));
-        onCommit(wField, () -> applyNumber(wField, v -> current.setWidth(Math.max(16, v))));
-        onCommit(hField, () -> applyNumber(hField, v -> current.setHeight(Math.max(16, v))));
-        onCommit(textField, () -> applyComponent(() -> current.setText(textField.getText())));
-        onCommit(fontField, () -> applyNumber(fontField, v -> current.setFontSize(Math.max(6, v))));
+        onCommit(xField, () -> applyNumber(xField, FormComponent::getX, (c, v) -> c.setX(v)));
+        onCommit(yField, () -> applyNumber(yField, FormComponent::getY, (c, v) -> c.setY(v)));
+        onCommit(wField, () -> applyNumber(wField, FormComponent::getWidth, (c, v) -> c.setWidth(Math.max(16, v))));
+        onCommit(hField, () -> applyNumber(hField, FormComponent::getHeight, (c, v) -> c.setHeight(Math.max(16, v))));
+        onCommit(textField, () -> {
+            if (current != null && !textField.getText().equals(current.getText())) {
+                applyComponent(() -> current.setText(textField.getText()));
+            }
+        });
+        onCommit(fontField, () -> applyNumber(fontField, FormComponent::getFontSize, (c, v) -> c.setFontSize(Math.max(6, v))));
         textColorPicker.setOnAction(e ->
                 applyComponent(() -> current.setTextColor(hex(textColorPicker.getValue()))));
         customBg.setOnAction(e -> {
@@ -177,26 +181,36 @@ public class InspectorPane extends VBox {
     }
 
     private void wireFormEdits() {
-        onCommit(titleField, () -> applyForm(() -> model.setTitle(titleField.getText())));
-        onCommit(formWField, () -> applyForm(() -> {
+        onCommit(titleField, () -> {
+            if (model != null && !titleField.getText().equals(model.getTitle())) {
+                applyForm(() -> model.setTitle(titleField.getText()));
+            }
+        });
+        onCommit(formWField, () -> {
             Double v = parse(formWField.getText());
-            if (v != null) {
-                model.setWidth(Math.max(100, v));
+            if (model != null && v != null && Math.max(100, v) != model.getWidth()) {
+                applyForm(() -> model.setWidth(Math.max(100, v)));
             }
-        }));
-        onCommit(formHField, () -> applyForm(() -> {
+        });
+        onCommit(formHField, () -> {
             Double v = parse(formHField.getText());
-            if (v != null) {
-                model.setHeight(Math.max(100, v));
+            if (model != null && v != null && Math.max(100, v) != model.getHeight()) {
+                applyForm(() -> model.setHeight(Math.max(100, v)));
             }
-        }));
+        });
     }
 
-    private void applyNumber(TextField field, java.util.function.DoubleConsumer setter) {
-        Double v = parse(field.getText());
-        if (v != null) {
-            applyComponent(() -> setter.accept(v));
+    private void applyNumber(TextField field,
+                             java.util.function.ToDoubleFunction<FormComponent> getter,
+                             java.util.function.ObjDoubleConsumer<FormComponent> setter) {
+        if (current == null) {
+            return;
         }
+        Double v = parse(field.getText());
+        if (v == null || v == getter.applyAsDouble(current)) {
+            return;
+        }
+        applyComponent(() -> setter.accept(current, v));
     }
 
     private void applyComponent(Runnable change) {

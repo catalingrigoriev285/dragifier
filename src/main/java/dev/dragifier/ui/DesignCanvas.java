@@ -38,6 +38,7 @@ public class DesignCanvas extends Pane {
     private Consumer<FormComponent> onSelect = c -> {};
     private Consumer<FormComponent> onGeometryChanged = c -> {};
     private Runnable onStructureChanged = () -> {};
+    private Consumer<FormComponent> onOpenEvents = c -> {};
 
     private double dragOffsetX;
     private double dragOffsetY;
@@ -108,6 +109,7 @@ public class DesignCanvas extends Pane {
     public void setOnSelect(Consumer<FormComponent> onSelect) { this.onSelect = onSelect; }
     public void setOnGeometryChanged(Consumer<FormComponent> onGeometryChanged) { this.onGeometryChanged = onGeometryChanged; }
     public void setOnStructureChanged(Runnable onStructureChanged) { this.onStructureChanged = onStructureChanged; }
+    public void setOnOpenEvents(Consumer<FormComponent> onOpenEvents) { this.onOpenEvents = onOpenEvents; }
 
     public void setModel(FormModel model) {
         this.model = model;
@@ -174,6 +176,9 @@ public class DesignCanvas extends Pane {
             dragOffsetX = e.getX();
             dragOffsetY = e.getY();
             requestFocus();
+            if (e.getClickCount() == 2) {
+                onOpenEvents.accept(c);
+            }
             e.consume();
         });
         wrapper.setOnMouseDragged(e -> {

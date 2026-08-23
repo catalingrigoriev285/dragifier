@@ -18,13 +18,21 @@ gradlew run
 - **Properties inspector**: position/size, text, font size, text color, custom background;
   form title and window size when nothing is selected
 - **Save / load** projects as JSON (`*.dragifier`)
-- **Preview** (F5): runs the form as a live window
+- **Quick Preview** (Shift+F5): renders the form as a live window, no compile
 - **Export Java Code**: generates a standalone JavaFX `Application` source file for the form
+
+## What works (milestone 2)
+
+- **Event handlers**: select (or double-click) a component and write Java for its event
+  ("On click", "On enter", "On value change"...) in the code pane at the bottom.
+  Handler code can reference any component on the form by its id, plus `stage`:
+  `label1.setText("Hello, " + textField1.getText() + "!");`
+- **▶ Run** (F5): generates the Java source, compiles it in-process with the `javac` API,
+  and launches your app as a separate Java process. Compile errors pop up with line numbers.
+- `gradlew smoke` — headless check that generated form code compiles
 
 ## Roadmap
 
-- Event handlers: pick a component event ("On click"...), write Java in an embedded code editor
-- Compile & run user code in-IDE via the `javac` API
 - Component tree view, copy/paste, undo/redo, multi-select and alignment guides
 - More components (ImageView, ComboBox, ListView, menus) and per-type properties
 - Multiple forms per project, `jpackage`-based packaging into native installers

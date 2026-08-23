@@ -29,3 +29,10 @@ application {
     mainClass = "dev.dragifier.DragifierApp"
     applicationDefaultJvmArgs = listOf("--enable-native-access=javafx.graphics")
 }
+
+tasks.register<JavaExec>("smoke") {
+    group = "verification"
+    description = "Headless check that generated form code compiles"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass = "dev.dragifier.CodegenSmoke"
+}
