@@ -218,6 +218,9 @@ public class MainWindow {
         scroll.setFitToWidth(true);
         scroll.setFitToHeight(true);
 
+        // tabs hold no content (the canvas below is the editor), so their computed
+        // min height is ~0 — pin it so the tab strip can never be squeezed away
+        formTabs.setMinHeight(Region.USE_PREF_SIZE);
         VBox editorArea = new VBox(formTabs, scroll);
         VBox.setVgrow(scroll, Priority.ALWAYS);
 
