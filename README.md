@@ -99,9 +99,23 @@ gradlew run
   events — code runs when the window opens.
 - **Canvas zoom**: 50–200% zoom combo in the toolbar; all editing works while zoomed.
 
+## What works (milestone 12)
+
+- **Project templates** (File → New from Template…, Ctrl+Shift+N): Hello World, Counter,
+  Login Form, and Two Forms — each a complete working app with event code to learn from.
+- **Text alignment** property (Left/Center/Right) for buttons, labels, check/radio boxes,
+  hyperlinks and text fields.
+
+## What works (milestone 13)
+
+- **Canvas rulers**: pixel rulers along the design canvas (labeled every 100 px), scaling
+  with zoom, plus a live cursor-position readout in the status bar.
+- **App icon** (Project → Set App Icon…): a `.png` becomes the window icon of every form
+  (bundled as a resource); a `.ico` becomes the packaged exe's icon via `jpackage --icon`.
+
 ## Roadmap
 
-- Ideas: text alignment property, canvas rulers, project templates, localization
+- Open to ideas
 
 ## Project layout
 

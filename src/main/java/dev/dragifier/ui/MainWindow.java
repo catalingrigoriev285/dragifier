@@ -50,6 +50,10 @@ public class MainWindow {
     private final InspectorPane inspector = new InspectorPane();
     private final EventEditorPane eventEditor = new EventEditorPane();
     private final ComponentTreePane tree = new ComponentTreePane();
+    private final Ruler hRuler = new Ruler(true);
+    private final Ruler vRuler = new Ruler(false);
+    private final javafx.scene.layout.GridPane rulerGrid = new javafx.scene.layout.GridPane();
+    private final Label cursorPos = new Label("");
     private final UndoManager undoManager = new UndoManager(() -> ProjectIO.toJson(project));
     private final Label status = new Label("Ready");
 
@@ -91,6 +95,7 @@ public class MainWindow {
         inspector.setNameInUse(name -> project.nameInUse(name, model));
         inspector.setOnFormEdited(() -> {
             canvas.applyFormSize();
+            updateRulers();
             if (project.findForm(project.getMainForm()) == null) {
                 project.setMainForm(model.getName());
             }
@@ -107,8 +112,21 @@ public class MainWindow {
         root.setLeft(left);
         root.setRight(inspector);
 
-        // Group so the canvas's zoom transform is included in layout bounds
-        StackPane canvasHolder = new StackPane(new javafx.scene.Group(canvas));
+        // rulers + canvas share one grid inside the zoom group, so they scale together
+        javafx.scene.layout.Region corner = new javafx.scene.layout.Region();
+        corner.setMinSize(Ruler.THICKNESS, Ruler.THICKNESS);
+        corner.setStyle("-fx-background-color: #efefef;");
+        rulerGrid.add(corner, 0, 0);
+        rulerGrid.add(hRuler, 1, 0);
+        rulerGrid.add(vRuler, 0, 1);
+        rulerGrid.add(canvas, 1, 1);
+
+        canvas.addEventHandler(javafx.scene.input.MouseEvent.MOUSE_MOVED,
+                e -> cursorPos.setText((int) e.getX() + ", " + (int) e.getY()));
+        canvas.addEventHandler(javafx.scene.input.MouseEvent.MOUSE_EXITED,
+                e -> cursorPos.setText(""));
+
+        StackPane canvasHolder = new StackPane(new javafx.scene.Group(rulerGrid));
         canvasHolder.setPadding(new Insets(24));
         canvasHolder.setStyle("-fx-background-color: #e4e4e4;");
         ScrollPane scroll = new ScrollPane(canvasHolder);
@@ -121,7 +139,11 @@ public class MainWindow {
         root.setCenter(center);
 
         status.setPadding(new Insets(4, 10, 4, 10));
-        root.setBottom(status);
+        cursorPos.setPadding(new Insets(4, 10, 4, 10));
+        cursorPos.setStyle("-fx-text-fill: #808080; -fx-font-family: 'Consolas', monospace;");
+        javafx.scene.layout.Region statusSpacer = new javafx.scene.layout.Region();
+        javafx.scene.layout.HBox.setHgrow(statusSpacer, javafx.scene.layout.Priority.ALWAYS);
+        root.setBottom(new javafx.scene.layout.HBox(status, statusSpacer, cursorPos));
 
         Scene scene = new Scene(root, 1100, 720);
         scene.getStylesheets().add(getClass().getResource("/code-highlight.css").toExternalForm());
@@ -140,6 +162,12 @@ public class MainWindow {
         tree.setModel(model);
         inspector.showForm();
         eventEditor.showForm(model);
+        updateRulers();
+    }
+
+    private void updateRulers() {
+        hRuler.redraw(model.getWidth());
+        vRuler.redraw(model.getHeight());
     }
 
     private void refreshFormBox() {
@@ -153,6 +181,7 @@ public class MainWindow {
         Menu file = new Menu("File");
         file.getItems().addAll(
                 item("New", "Shortcut+N", this::newProject),
+                item("New from Template…", "Shortcut+Shift+N", this::newFromTemplate),
                 item("Open…", "Shortcut+O", this::openProject),
                 item("Save", "Shortcut+S", this::saveProject),
                 item("Save As…", "Shortcut+Shift+S", this::saveProjectAs),
@@ -187,6 +216,9 @@ public class MainWindow {
                 item("Run", "F5", this::run),
                 item("Quick Preview", "Shift+F5", this::preview),
                 item("Export Java Code…", "Shortcut+E", this::exportCode),
+                new SeparatorMenuItem(),
+                item("Set App Icon…", null, this::setAppIcon),
+                item("Clear App Icon", null, this::clearAppIcon),
                 new SeparatorMenuItem(),
                 item("Package App…", null, () -> packageTo(AppPackager.OutputType.APP_IMAGE)),
                 item("Package Installer (.exe)…", null, () -> packageTo(AppPackager.OutputType.INSTALLER)));
@@ -263,7 +295,7 @@ public class MainWindow {
             Integer percent = zoomBox.getValue();
             if (percent != null) {
                 double z = percent / 100.0;
-                canvas.getTransforms().setAll(new javafx.scene.transform.Scale(z, z));
+                rulerGrid.getTransforms().setAll(new javafx.scene.transform.Scale(z, z));
             }
         });
 
@@ -292,6 +324,26 @@ public class MainWindow {
         bindProject();
         updateTitle();
         status.setText("New project");
+    }
+
+    private void newFromTemplate() {
+        var templates = dev.dragifier.model.Templates.all();
+        javafx.scene.control.ChoiceDialog<String> dialog = new javafx.scene.control.ChoiceDialog<>(
+                templates.get(0).name(), templates.stream().map(t -> t.name()).toList());
+        dialog.setTitle("New from Template");
+        dialog.setHeaderText("Choose a starter template");
+        dialog.setContentText("Template:");
+        dialog.showAndWait().ifPresent(name -> templates.stream()
+                .filter(t -> t.name().equals(name)).findFirst().ifPresent(t -> {
+                    project = t.factory().get();
+                    model = project.effectiveMain();
+                    currentFile = null;
+                    dirty = false;
+                    undoManager.clear();
+                    bindProject();
+                    updateTitle();
+                    status.setText("Created from template: " + name);
+                }));
     }
 
     private void openProject() {
@@ -360,6 +412,38 @@ public class MainWindow {
 
     private void preview() {
         PreviewWindow.show(model, stage);
+    }
+
+    private void setAppIcon() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Choose App Icon");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(
+                "Icon (*.png for window icon, *.ico for exe icon)", "*.png", "*.ico"));
+        File file = chooser.showOpenDialog(stage);
+        if (file == null) {
+            return;
+        }
+        try {
+            byte[] bytes = Files.readAllBytes(file.toPath());
+            undoManager.checkpoint(null);
+            project.setIconData(java.util.Base64.getEncoder().encodeToString(bytes));
+            project.setIconFormat(file.getName().toLowerCase().endsWith(".ico") ? "ico" : "png");
+            markDirty();
+            status.setText("App icon set (" + project.getIconFormat() + "): " + file.getName());
+        } catch (IOException ex) {
+            error("Could not read icon", ex);
+        }
+    }
+
+    private void clearAppIcon() {
+        if (project.getIconData().isEmpty()) {
+            return;
+        }
+        undoManager.checkpoint(null);
+        project.setIconData("");
+        project.setIconFormat("");
+        markDirty();
+        status.setText("App icon cleared");
     }
 
     private void packageTo(AppPackager.OutputType type) {

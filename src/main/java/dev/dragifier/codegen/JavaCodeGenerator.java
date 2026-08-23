@@ -19,6 +19,7 @@ import java.util.Map;
 public final class JavaCodeGenerator {
 
     public static final String MAIN_CLASS = "Main";
+    public static final String ICON_RESOURCE = "app_icon.png";
 
     private JavaCodeGenerator() {}
 
@@ -46,7 +47,7 @@ public final class JavaCodeGenerator {
     public static Map<String, String> generateProject(ProjectModel project) {
         Map<String, String> sources = new LinkedHashMap<>();
         for (FormModel form : project.getForms()) {
-            sources.put(className(form) + ".java", formSource(form));
+            sources.put(className(form) + ".java", formSource(project, form));
         }
         sources.put(MAIN_CLASS + ".java", mainSource(project));
         return sources;
@@ -66,9 +67,10 @@ public final class JavaCodeGenerator {
                 + "}\n";
     }
 
-    private static String formSource(FormModel form) {
+    private static String formSource(ProjectModel project, FormModel form) {
         String cls = className(form);
         StringBuilder out = new StringBuilder();
+        out.append("import javafx.geometry.Pos;\n");
         out.append("import javafx.scene.Scene;\n");
         out.append("import javafx.scene.control.*;\n");
         out.append("import javafx.scene.image.Image;\n");
@@ -108,6 +110,14 @@ public final class JavaCodeGenerator {
             if (c.isDisabled()) {
                 out.append("        ").append(var).append(".setDisable(true);\n");
             }
+            if (!c.getAlignment().isEmpty() && Renderer.supportsAlignment(c.getType())) {
+                String pos = switch (c.getAlignment()) {
+                    case "CENTER" -> "Pos.CENTER";
+                    case "RIGHT" -> "Pos.CENTER_RIGHT";
+                    default -> "Pos.CENTER_LEFT";
+                };
+                out.append("        ").append(var).append(".setAlignment(").append(pos).append(");\n");
+            }
             if (!c.getTooltip().isEmpty()) {
                 boolean isControl = c.getType() != ComponentType.PANEL && c.getType() != ComponentType.IMAGE_VIEW;
                 if (isControl) {
@@ -123,6 +133,10 @@ public final class JavaCodeGenerator {
         }
 
         appendFormEvents(out, form);
+        if (project.hasWindowIcon()) {
+            out.append("        getIcons().add(new Image(").append(cls)
+               .append(".class.getResourceAsStream(\"/").append(ICON_RESOURCE).append("\")));\n");
+        }
         out.append("        setTitle(\"").append(escape(form.getTitle())).append("\");\n");
         out.append("        setScene(new Scene(root));\n");
         out.append("        setResizable(false);\n");

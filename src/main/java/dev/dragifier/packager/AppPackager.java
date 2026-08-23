@@ -98,6 +98,11 @@ public final class AppPackager {
         if (type == OutputType.INSTALLER) {
             cmd.addAll(List.of("--app-version", "1.0", "--win-shortcut", "--win-menu"));
         }
+        if (!project.getIconData().isEmpty() && "ico".equals(project.getIconFormat())) {
+            Path ico = compiled.dir().resolve("app_icon.ico");
+            Files.write(ico, java.util.Base64.getDecoder().decode(project.getIconData()));
+            cmd.addAll(List.of("--icon", ico.toString()));
+        }
         String modulePath = AppRunner.javafxModulePath();
         if (modulePath != null) {
             cmd.addAll(List.of("--module-path", modulePath, "--add-modules", "javafx.controls"));
@@ -130,7 +135,8 @@ public final class AppPackager {
              Stream<Path> files = Files.walk(classesDir)) {
             for (Path p : (Iterable<Path>) files::iterator) {
                 if (Files.isRegularFile(p)
-                        && (p.toString().endsWith(".class") || p.toString().endsWith(".img"))) {
+                        && (p.toString().endsWith(".class") || p.toString().endsWith(".img")
+                            || p.toString().endsWith(".png"))) {
                     out.putNextEntry(new ZipEntry(classesDir.relativize(p).toString().replace('\\', '/')));
                     out.write(Files.readAllBytes(p));
                     out.closeEntry();

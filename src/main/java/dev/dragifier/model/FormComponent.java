@@ -23,6 +23,8 @@ public class FormComponent {
     private String imageData = "";
     private String tooltip = "";
     private boolean disabled = false;
+    /** Text alignment: "LEFT", "CENTER", "RIGHT", or "" for the type's default. */
+    private String alignment = "";
     private Map<String, String> events = new LinkedHashMap<>();
 
     public String getId() { return id; }
@@ -69,6 +71,9 @@ public class FormComponent {
 
     public boolean isDisabled() { return disabled; }
     public void setDisabled(boolean disabled) { this.disabled = disabled; }
+
+    public String getAlignment() { return alignment == null ? "" : alignment; }
+    public void setAlignment(String alignment) { this.alignment = alignment; }
 
     /** Event key → Java handler body. Missing/blank entries mean "no handler". */
     public Map<String, String> getEvents() {

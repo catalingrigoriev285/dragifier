@@ -68,9 +68,32 @@ public final class Renderer {
         } else if (node instanceof ImageBox box) {
             box.update(c);
         }
+        if (node instanceof Labeled labeled) {
+            labeled.setAlignment(posFor(c));
+        } else if (node instanceof TextField textField) {
+            textField.setAlignment(posFor(c));
+        }
         node.setDisable(c.isDisabled());
         applyTooltip(node, c.getTooltip());
         node.setStyle(styleFor(c));
+    }
+
+    /** True for types whose text alignment can be set. */
+    public static boolean supportsAlignment(ComponentType type) {
+        return switch (type) {
+            case BUTTON, LABEL, CHECK_BOX, RADIO_BUTTON, HYPERLINK, TEXT_FIELD -> true;
+            default -> false;
+        };
+    }
+
+    private static javafx.geometry.Pos posFor(FormComponent c) {
+        return switch (c.getAlignment()) {
+            case "LEFT" -> javafx.geometry.Pos.CENTER_LEFT;
+            case "CENTER" -> javafx.geometry.Pos.CENTER;
+            case "RIGHT" -> javafx.geometry.Pos.CENTER_RIGHT;
+            default -> c.getType() == ComponentType.BUTTON
+                    ? javafx.geometry.Pos.CENTER : javafx.geometry.Pos.CENTER_LEFT;
+        };
     }
 
     private static void applyTooltip(Region node, String text) {

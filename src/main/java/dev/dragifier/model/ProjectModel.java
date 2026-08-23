@@ -8,6 +8,9 @@ public class ProjectModel {
 
     private List<FormModel> forms = new ArrayList<>();
     private String mainForm = "";
+    /** Base64 app icon bytes; "png" is used as the window icon, "ico" as the exe icon. */
+    private String iconData = "";
+    private String iconFormat = "";
 
     public static ProjectModel withDefaultForm() {
         ProjectModel p = new ProjectModel();
@@ -66,6 +69,16 @@ public class ProjectModel {
             mainForm = getForms().get(0).getName();
         }
         return true;
+    }
+
+    public String getIconData() { return iconData == null ? "" : iconData; }
+    public void setIconData(String iconData) { this.iconData = iconData; }
+
+    public String getIconFormat() { return iconFormat == null ? "" : iconFormat; }
+    public void setIconFormat(String iconFormat) { this.iconFormat = iconFormat; }
+
+    public boolean hasWindowIcon() {
+        return !getIconData().isEmpty() && "png".equals(getIconFormat());
     }
 
     public String getMainForm() { return mainForm; }

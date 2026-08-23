@@ -70,6 +70,9 @@ public final class CodegenSmoke {
         open.setText("Open Form2");
         open.getEvents().put("onAction", "new Form2().show();");
 
+        project.setIconData(image.getImageData());
+        project.setIconFormat("png");
+
         for (var entry : JavaCodeGenerator.generateProject(project).entrySet()) {
             System.out.println("===== " + entry.getKey() + " =====");
             System.out.println(entry.getValue());
@@ -87,8 +90,24 @@ public final class CodegenSmoke {
             System.exit(1);
         }
         System.out.println("SMOKE OK: image resource written next to classes.");
+        if (!java.nio.file.Files.exists(result.dir().resolve(JavaCodeGenerator.ICON_RESOURCE))) {
+            System.err.println("SMOKE FAILED: window icon resource was not written");
+            System.exit(1);
+        }
+        System.out.println("SMOKE OK: window icon resource written.");
 
         checkUndoRedo(project, label);
+
+        for (var template : dev.dragifier.model.Templates.all()) {
+            AppRunner.CompileResult tr = AppRunner.compile(template.factory().get());
+            if (!tr.ok()) {
+                System.err.println("SMOKE FAILED: template '" + template.name()
+                        + "' does not compile:\n" + tr.errorDetails());
+                System.exit(1);
+            }
+        }
+        System.out.println("SMOKE OK: all " + dev.dragifier.model.Templates.all().size()
+                + " templates compile.");
     }
 
     private static void checkUndoRedo(ProjectModel project, FormComponent label) {

@@ -49,6 +49,7 @@ public class FormModel {
         c.setImageData(src.getImageData());
         c.setTooltip(src.getTooltip());
         c.setDisabled(src.isDisabled());
+        c.setAlignment(src.getAlignment());
         c.getEvents().putAll(src.getEvents());
         return c;
     }

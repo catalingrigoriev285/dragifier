@@ -49,6 +49,8 @@ public class InspectorPane extends VBox {
     private Label imageLabel;
     private final TextField tooltipField = new TextField();
     private final CheckBox disabledBox = new CheckBox("Disabled");
+    private final javafx.scene.control.ComboBox<String> alignBox = new javafx.scene.control.ComboBox<>();
+    private Label alignLabel;
 
     private final GridPane formGrid = new GridPane();
     private final TextField nameField = new TextField();
@@ -88,6 +90,8 @@ public class InspectorPane extends VBox {
         imageButtons.getChildren().addAll(chooseImage, clearImage);
         imageLabel = addRow(componentGrid, row++, "Image", imageButtons);
         addRow(componentGrid, row++, "Tooltip", tooltipField);
+        alignBox.getItems().addAll("Default", "Left", "Center", "Right");
+        alignLabel = addRow(componentGrid, row++, "Align", alignBox);
         componentGrid.add(disabledBox, 0, row, 2, 1);
 
         setupGrid(formGrid);
@@ -171,6 +175,13 @@ public class InspectorPane extends VBox {
         setRowVisible(imageLabel, imageButtons, c.getType() == ComponentType.IMAGE_VIEW);
         tooltipField.setText(c.getTooltip());
         disabledBox.setSelected(c.isDisabled());
+        setRowVisible(alignLabel, alignBox, Renderer.supportsAlignment(c.getType()));
+        alignBox.setValue(switch (c.getAlignment()) {
+            case "LEFT" -> "Left";
+            case "CENTER" -> "Center";
+            case "RIGHT" -> "Right";
+            default -> "Default";
+        });
         componentGrid.setVisible(true);
         componentGrid.setManaged(true);
         formGrid.setVisible(false);
@@ -244,6 +255,21 @@ public class InspectorPane extends VBox {
         });
         disabledBox.setOnAction(e ->
                 applyComponent(() -> current.setDisabled(disabledBox.isSelected())));
+        alignBox.setOnAction(e -> {
+            String picked = alignBox.getValue();
+            if (picked == null) {
+                return;
+            }
+            String value = switch (picked) {
+                case "Left" -> "LEFT";
+                case "Center" -> "CENTER";
+                case "Right" -> "RIGHT";
+                default -> "";
+            };
+            if (current != null && !value.equals(current.getAlignment())) {
+                applyComponent(() -> current.setAlignment(value));
+            }
+        });
         textColorPicker.setOnAction(e ->
                 applyComponent(() -> current.setTextColor(hex(textColorPicker.getValue()))));
         customBg.setOnAction(e -> {

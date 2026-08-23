@@ -92,6 +92,10 @@ public final class AppRunner {
 
     /** Writes each Image component's bytes next to the classes so getResourceAsStream finds them. */
     private static void writeImageResources(ProjectModel project, Path dir) throws Exception {
+        if (project.hasWindowIcon()) {
+            Files.write(dir.resolve(JavaCodeGenerator.ICON_RESOURCE),
+                    java.util.Base64.getDecoder().decode(project.getIconData()));
+        }
         for (FormModel form : project.getForms()) {
             for (var c : form.getComponents()) {
                 if (!c.getImageData().isEmpty()) {
