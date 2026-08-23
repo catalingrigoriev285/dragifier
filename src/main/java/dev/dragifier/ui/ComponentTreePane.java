@@ -22,17 +22,22 @@ public class ComponentTreePane extends VBox {
     public ComponentTreePane() {
         setSpacing(6);
         setPadding(new Insets(10));
-        setStyle("-fx-background-color: #f5f5f5; -fx-border-color: #d0d0d0; -fx-border-width: 1 1 0 0;");
+        getStyleClass().add("side-panel");
 
         Label title = new Label("Components");
-        title.setStyle("-fx-font-weight: bold; -fx-font-size: 13px;");
+        title.getStyleClass().add("panel-header");
 
         list.setCellFactory(v -> new ListCell<>() {
             @Override
             protected void updateItem(FormComponent item, boolean empty) {
                 super.updateItem(item, empty);
-                setText(empty || item == null ? null
-                        : item.getId() + " — " + item.getType().displayName);
+                if (empty || item == null) {
+                    setText(null);
+                    setGraphic(null);
+                } else {
+                    setText(item.getId() + " — " + item.getType().displayName);
+                    setGraphic(Icons.forType(item.getType()));
+                }
             }
         });
         list.getSelectionModel().selectedItemProperty().addListener((obs, was, picked) -> {

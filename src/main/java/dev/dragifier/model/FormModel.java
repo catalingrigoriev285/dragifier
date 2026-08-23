@@ -33,6 +33,20 @@ public class FormModel {
         components.remove(c);
     }
 
+    /** Moves a component to the end of the list = topmost in z-order. */
+    public void toFront(FormComponent c) {
+        if (components.remove(c)) {
+            components.add(c);
+        }
+    }
+
+    /** Moves a component to the start of the list = bottommost in z-order. */
+    public void toBack(FormComponent c) {
+        if (components.remove(c)) {
+            components.add(0, c);
+        }
+    }
+
     /** Adds a copy of {@code src} with a fresh id, offset slightly and kept inside the form. */
     public FormComponent duplicate(FormComponent src) {
         double nx = Math.min(src.getX() + 16, Math.max(0, width - src.getWidth()));

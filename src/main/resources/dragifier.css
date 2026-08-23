@@ -1,0 +1,119 @@
+/* Dragifier IDE chrome. Colors come from AtlantaFX theme variables so the
+   light (Primer Light) and dark (Primer Dark) themes both work unchanged. */
+
+.side-panel {
+    -fx-background-color: -color-bg-subtle;
+}
+
+.panel-header {
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+}
+
+.hint-text {
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-size: 11px;
+}
+
+.mono-hint {
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-size: 11px;
+    -fx-font-family: 'Cascadia Code', 'Consolas', monospace;
+}
+
+.palette-item {
+    -fx-background-color: -color-bg-default;
+    -fx-border-color: -color-border-default;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-padding: 6 10 6 10;
+    -fx-graphic-text-gap: 8;
+    -fx-cursor: open-hand;
+}
+
+.palette-item:hover {
+    -fx-border-color: -color-accent-emphasis;
+    -fx-background-color: -color-accent-subtle;
+}
+
+.palette-item .ikonli-font-icon {
+    -fx-icon-color: -color-fg-muted;
+    -fx-icon-size: 14;
+}
+
+.tree-cell .ikonli-font-icon,
+.list-cell .ikonli-font-icon {
+    -fx-icon-color: -color-fg-muted;
+    -fx-icon-size: 13;
+}
+
+.status-bar {
+    -fx-background-color: -color-bg-subtle;
+    -fx-border-color: -color-border-default;
+    -fx-border-width: 1 0 0 0;
+}
+
+.cursor-pos {
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-family: 'Cascadia Code', 'Consolas', monospace;
+}
+
+.canvas-surround {
+    -fx-background-color: -color-bg-inset;
+}
+
+.ruler-corner {
+    -fx-background-color: transparent;
+}
+
+.bottom-panel {
+    -fx-background-color: -color-bg-subtle;
+}
+
+.console-area {
+    -fx-font-family: 'Cascadia Code', 'Consolas', monospace;
+    -fx-font-size: 12px;
+}
+
+/* selected component outline on the design canvas */
+.design-selected {
+    -fx-border-color: -color-accent-emphasis;
+    -fx-border-width: 1;
+}
+
+/* inspector sections */
+.inspector .titled-pane > .title {
+    -fx-font-weight: bold;
+}
+
+/* welcome screen */
+.welcome-title {
+    -fx-font-size: 34px;
+    -fx-font-weight: bold;
+}
+
+.welcome-subtitle {
+    -fx-font-size: 14px;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.welcome-section {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -color-fg-muted;
+}
+
+.template-card {
+    -fx-background-color: -color-bg-default;
+    -fx-border-color: -color-border-default;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-padding: 14 18 14 18;
+    -fx-font-size: 13px;
+}
+
+.template-card:hover {
+    -fx-border-color: -color-accent-emphasis;
+    -fx-background-color: -color-accent-subtle;
+    -fx-cursor: hand;
+}

@@ -113,6 +113,19 @@ gradlew run
 - **App icon** (Project → Set App Icon…): a `.png` becomes the window icon of every form
   (bundled as a resource); a `.ico` becomes the packaged exe's icon via `jpackage --icon`.
 
+## What works (milestone 14 — UI overhaul)
+
+- **Modern theme**: AtlantaFX Primer Light by default, View → Dark Theme for a full dark
+  mode (including the code editor's colors). All chrome uses theme variables.
+- **Professional layout**: forms as editor tabs (★ = startup form, right-click → Set as
+  Main, close = delete), icon toolbar (Feather icons), palette/tree and inspector restyled,
+  inspector grouped into collapsible Layout / Appearance / Behavior sections.
+- **Console tab**: compile progress and the running app's stdout/stderr stream live into
+  a bottom tab next to Events — `System.out.println` debugging works.
+- **Welcome screen**: on startup — new/open project, template gallery, recent projects
+  (also in File → Open Recent, persisted between sessions).
+- **Z-order** (Arrange → Bring to Front / Send to Back) and a **grid-snap toggle** in the toolbar.
+
 ## Roadmap
 
 - Open to ideas

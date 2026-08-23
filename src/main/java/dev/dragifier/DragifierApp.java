@@ -9,6 +9,7 @@ public class DragifierApp extends Application {
 
     @Override
     public void start(Stage stage) {
+        Application.setUserAgentStylesheet(new atlantafx.base.theme.PrimerLight().getUserAgentStylesheet());
         new MainWindow(stage);
         stage.show();
     }

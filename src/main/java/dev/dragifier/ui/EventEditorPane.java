@@ -35,10 +35,10 @@ public class EventEditorPane extends VBox {
     public EventEditorPane() {
         setSpacing(6);
         setPadding(new Insets(8, 10, 8, 10));
-        setStyle("-fx-background-color: #f5f5f5; -fx-border-color: #d0d0d0; -fx-border-width: 1 0 0 0;");
+        getStyleClass().add("bottom-panel");
 
-        header.setStyle("-fx-font-weight: bold; -fx-font-size: 13px;");
-        hint.setStyle("-fx-text-fill: #909090; -fx-font-size: 11px; -fx-font-family: 'Consolas', monospace;");
+        header.getStyleClass().add("panel-header");
+        hint.getStyleClass().add("mono-hint");
 
         eventBox.setConverter(new StringConverter<>() {
             @Override public String toString(EventSpec spec) {
@@ -57,7 +57,7 @@ public class EventEditorPane extends VBox {
         codeArea.setParagraphGraphicFactory(LineNumberFactory.get(codeArea));
         Label placeholder = new Label(
                 "Java code for the selected event, e.g.  label1.setText(\"Clicked!\");");
-        placeholder.setStyle("-fx-text-fill: #a8a8a8; -fx-font-family: 'Consolas', monospace;");
+        placeholder.getStyleClass().add("mono-hint");
         codeArea.setPlaceholder(placeholder);
         codeArea.textProperty().addListener((obs, was, text) -> {
             storeCode(text);

@@ -35,6 +35,10 @@ public class DesignCanvas extends Pane {
     private static final double GUIDE_SNAP = 6;
     private static final double MIN_SIZE = 16;
     private static final double HANDLE_SIZE = 8;
+    /** Matches the Primer accent used by the app theme. */
+    private static final Color ACCENT = Color.web("#0969da");
+
+    private boolean snapEnabled = true;
 
     private enum Dir { NW, N, NE, E, SE, S, SW, W }
 
@@ -82,8 +86,8 @@ public class DesignCanvas extends Pane {
             guide.setMouseTransparent(true);
             guide.setVisible(false);
         }
-        marquee.setFill(Color.web("#3b82f6", 0.08));
-        marquee.setStroke(Color.web("#3b82f6"));
+        marquee.setFill(ACCENT.deriveColor(0, 1, 1, 0.08));
+        marquee.setStroke(ACCENT);
         marquee.setMouseTransparent(true);
         marquee.setVisible(false);
 
@@ -188,6 +192,22 @@ public class DesignCanvas extends Pane {
         return selection.isEmpty() ? null : selection.iterator().next();
     }
 
+    /** Snapshot of the current selection, in selection order. */
+    public List<FormComponent> getSelectionList() {
+        return List.copyOf(selection);
+    }
+
+    public void setSnapEnabled(boolean snapEnabled) {
+        this.snapEnabled = snapEnabled;
+    }
+
+    /** Rebuild after external model reordering (z-order), keeping the selection. */
+    public void rebuildPreservingSelection() {
+        List<FormComponent> kept = getSelectionList();
+        rebuild();
+        setSelection(kept);
+    }
+
     public void setModel(FormModel model) {
         this.model = model;
         rebuild();
@@ -238,9 +258,11 @@ public class DesignCanvas extends Pane {
             }
         }
         for (Map.Entry<FormComponent, Pane> entry : wrappers.entrySet()) {
-            entry.getValue().setStyle(selection.contains(entry.getKey())
-                    ? "-fx-border-color: #3b82f6; -fx-border-width: 1;"
-                    : "");
+            boolean isSelected = selection.contains(entry.getKey());
+            entry.getValue().getStyleClass().removeAll("design-selected");
+            if (isSelected) {
+                entry.getValue().getStyleClass().add("design-selected");
+            }
         }
         handleGroup.setVisible(selection.size() == 1);
         if (selection.size() == 1) {
@@ -478,7 +500,7 @@ public class DesignCanvas extends Pane {
 
     private void createHandles() {
         for (Dir dir : Dir.values()) {
-            Rectangle handle = new Rectangle(HANDLE_SIZE, HANDLE_SIZE, Color.web("#3b82f6"));
+            Rectangle handle = new Rectangle(HANDLE_SIZE, HANDLE_SIZE, ACCENT);
             handle.setStroke(Color.WHITE);
             handle.setStrokeWidth(1);
             handle.setCursor(cursorFor(dir));
@@ -678,8 +700,8 @@ public class DesignCanvas extends Pane {
         };
     }
 
-    private static double snap(double v) {
-        return Math.round(v / GRID) * GRID;
+    private double snap(double v) {
+        return snapEnabled ? Math.round(v / GRID) * GRID : v;
     }
 
     private static double clamp(double v, double min, double max) {

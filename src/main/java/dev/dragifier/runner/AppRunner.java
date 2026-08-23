@@ -33,13 +33,16 @@ public final class AppRunner {
     private AppRunner() {}
 
     /**
-     * Runs asynchronously. {@code status} and {@code error} are always invoked
-     * on the JavaFX application thread.
+     * Runs asynchronously. {@code status}, {@code error} and {@code output}
+     * (one line of the app's stdout/stderr at a time) are always invoked on
+     * the JavaFX application thread.
      */
-    public static void run(ProjectModel project, Consumer<String> status, BiConsumer<String, String> error) {
+    public static void run(ProjectModel project, Consumer<String> status,
+                           BiConsumer<String, String> error, Consumer<String> output) {
         Thread thread = new Thread(() -> execute(project,
                 s -> Platform.runLater(() -> status.accept(s)),
-                (h, d) -> Platform.runLater(() -> error.accept(h, d))),
+                (h, d) -> Platform.runLater(() -> error.accept(h, d)),
+                line -> Platform.runLater(() -> output.accept(line))),
                 "dragifier-runner");
         thread.setDaemon(true);
         thread.start();
@@ -106,7 +109,8 @@ public final class AppRunner {
         }
     }
 
-    private static void execute(ProjectModel project, Consumer<String> status, BiConsumer<String, String> error) {
+    private static void execute(ProjectModel project, Consumer<String> status,
+                                BiConsumer<String, String> error, Consumer<String> output) {
         try {
             status.accept("Compiling…");
             CompileResult result = compile(project);
@@ -128,10 +132,18 @@ public final class AppRunner {
             }
             cmd.addAll(List.of("-cp", dir.toString(), cls));
             Process process = new ProcessBuilder(cmd).redirectErrorStream(true).start();
-            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            StringBuilder all = new StringBuilder();
+            try (var reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    all.append(line).append('\n');
+                    output.accept(line);
+                }
+            }
             int exit = process.waitFor();
             if (exit != 0) {
-                error.accept("App exited with code " + exit, output);
+                error.accept("App exited with code " + exit, all.toString());
             }
             status.accept("App finished (exit code " + exit + ")");
         } catch (Exception ex) {

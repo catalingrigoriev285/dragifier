@@ -1,33 +1,59 @@
 package dev.dragifier.ui;
 
+import atlantafx.base.theme.PrimerDark;
+import atlantafx.base.theme.PrimerLight;
 import dev.dragifier.codegen.JavaCodeGenerator;
 import dev.dragifier.io.ProjectIO;
+import dev.dragifier.io.RecentProjects;
 import dev.dragifier.model.FormModel;
 import dev.dragifier.model.ProjectModel;
+import dev.dragifier.model.Templates;
 import dev.dragifier.packager.AppPackager;
 import dev.dragifier.runner.AppRunner;
 import dev.dragifier.undo.UndoManager;
+import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
+import javafx.scene.Group;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.CheckMenuItem;
+import javafx.scene.control.ChoiceDialog;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuBar;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Separator;
 import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.SplitPane;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToolBar;
+import javafx.scene.control.Tooltip;
 import javafx.scene.input.KeyCombination;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.transform.Scale;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import javafx.util.StringConverter;
+import org.kordamp.ikonli.feather.Feather;
+import org.kordamp.ikonli.javafx.FontIcon;
 
 import java.io.File;
 import java.io.IOException;
@@ -35,7 +61,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-/** The main IDE window: menu, toolbar, palette, design canvas and inspector. */
+/** The main IDE window: menus, icon toolbar, form tabs, palette, design canvas, inspector, events/console. */
 public class MainWindow {
 
     private final Stage stage;
@@ -43,19 +69,28 @@ public class MainWindow {
     private FormModel model = project.effectiveMain();
     private Path currentFile;
     private boolean dirty;
-    private final javafx.scene.control.ComboBox<FormModel> formBox = new javafx.scene.control.ComboBox<>();
-    private boolean formBoxUpdating;
+    private boolean darkTheme;
 
     private final DesignCanvas canvas = new DesignCanvas();
     private final InspectorPane inspector = new InspectorPane();
     private final EventEditorPane eventEditor = new EventEditorPane();
+    private final ConsolePane console = new ConsolePane();
     private final ComponentTreePane tree = new ComponentTreePane();
+    private final UndoManager undoManager = new UndoManager(() -> ProjectIO.toJson(project));
+
+    private final TabPane formTabs = new TabPane();
+    private boolean formTabsUpdating;
+    private final TabPane bottomTabs = new TabPane();
     private final Ruler hRuler = new Ruler(true);
     private final Ruler vRuler = new Ruler(false);
-    private final javafx.scene.layout.GridPane rulerGrid = new javafx.scene.layout.GridPane();
-    private final Label cursorPos = new Label("");
-    private final UndoManager undoManager = new UndoManager(() -> ProjectIO.toJson(project));
+    private final GridPane rulerGrid = new GridPane();
     private final Label status = new Label("Ready");
+    private final Label cursorPos = new Label("");
+
+    private final BorderPane root = new BorderPane();
+    private WelcomePane welcomePane;
+    private Node designerCenter;
+    private Node leftPanel;
 
     public MainWindow(Stage stage) {
         this.stage = stage;
@@ -73,7 +108,10 @@ public class MainWindow {
                 eventEditor.showNone();
             }
         });
-        canvas.setOnOpenEvents(c -> eventEditor.focusCode());
+        canvas.setOnOpenEvents(c -> {
+            bottomTabs.getSelectionModel().select(0);
+            eventEditor.focusCode();
+        });
         canvas.setOnCheckpoint(undoManager::checkpoint);
         inspector.setCheckpoint(() -> undoManager.checkpoint(null));
         eventEditor.setCheckpoint(undoManager::checkpoint);
@@ -88,10 +126,6 @@ public class MainWindow {
             tree.select(canvas.getSelected());
             markDirty();
         });
-        inspector.setOnComponentEdited(c -> {
-            canvas.refresh(c);
-            markDirty();
-        });
         inspector.setNameInUse(name -> project.nameInUse(name, model));
         inspector.setOnFormEdited(() -> {
             canvas.applyFormSize();
@@ -99,92 +133,137 @@ public class MainWindow {
             if (project.findForm(project.getMainForm()) == null) {
                 project.setMainForm(model.getName());
             }
-            refreshFormBox();
+            refreshFormTabs();
             markDirty();
         });
 
-        bindProject();
+        welcomePane = new WelcomePane(
+                () -> { newProject(); showDesigner(); },
+                this::openProject,
+                template -> loadTemplate(template),
+                this::openPath);
 
-        BorderPane root = new BorderPane();
+        designerCenter = buildDesignerCenter();
+        leftPanel = buildLeftPanel();
+
         root.setTop(new VBox(buildMenuBar(), buildToolBar()));
-        VBox left = new VBox(new PalettePane(), tree);
-        VBox.setVgrow(tree, javafx.scene.layout.Priority.ALWAYS);
-        root.setLeft(left);
         root.setRight(inspector);
+        buildStatusBar();
 
-        // rulers + canvas share one grid inside the zoom group, so they scale together
-        javafx.scene.layout.Region corner = new javafx.scene.layout.Region();
+        Scene scene = new Scene(root, 1200, 780);
+        scene.getStylesheets().add(getClass().getResource("/dragifier.css").toExternalForm());
+        scene.getStylesheets().add(getClass().getResource("/code-highlight.css").toExternalForm());
+        stage.setScene(scene);
+
+        bindProject();
+        showWelcome();
+        updateTitle();
+    }
+
+    // ---------------------------------------------------------------- layout
+
+    private Node buildDesignerCenter() {
+        formTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.ALL_TABS);
+        formTabs.getSelectionModel().selectedItemProperty().addListener((obs, was, tab) -> {
+            if (formTabsUpdating || tab == null) {
+                return;
+            }
+            FormModel picked = (FormModel) tab.getUserData();
+            if (picked != null && picked != model) {
+                model = picked;
+                bindActiveForm();
+            }
+        });
+
+        Region corner = new Region();
         corner.setMinSize(Ruler.THICKNESS, Ruler.THICKNESS);
-        corner.setStyle("-fx-background-color: #efefef;");
+        corner.getStyleClass().add("ruler-corner");
         rulerGrid.add(corner, 0, 0);
         rulerGrid.add(hRuler, 1, 0);
         rulerGrid.add(vRuler, 0, 1);
         rulerGrid.add(canvas, 1, 1);
 
-        canvas.addEventHandler(javafx.scene.input.MouseEvent.MOUSE_MOVED,
+        canvas.addEventHandler(MouseEvent.MOUSE_MOVED,
                 e -> cursorPos.setText((int) e.getX() + ", " + (int) e.getY()));
-        canvas.addEventHandler(javafx.scene.input.MouseEvent.MOUSE_EXITED,
-                e -> cursorPos.setText(""));
+        canvas.addEventHandler(MouseEvent.MOUSE_EXITED, e -> cursorPos.setText(""));
 
-        StackPane canvasHolder = new StackPane(new javafx.scene.Group(rulerGrid));
+        StackPane canvasHolder = new StackPane(new Group(rulerGrid));
         canvasHolder.setPadding(new Insets(24));
-        canvasHolder.setStyle("-fx-background-color: #e4e4e4;");
+        canvasHolder.getStyleClass().add("canvas-surround");
         ScrollPane scroll = new ScrollPane(canvasHolder);
         scroll.setFitToWidth(true);
         scroll.setFitToHeight(true);
 
-        SplitPane center = new SplitPane(scroll, eventEditor);
+        VBox editorArea = new VBox(formTabs, scroll);
+        VBox.setVgrow(scroll, Priority.ALWAYS);
+
+        Tab eventsTab = new Tab("Events", eventEditor);
+        eventsTab.setClosable(false);
+        eventsTab.setGraphic(new FontIcon(Feather.ZAP));
+        Tab consoleTab = new Tab("Console", console);
+        consoleTab.setClosable(false);
+        consoleTab.setGraphic(new FontIcon(Feather.TERMINAL));
+        bottomTabs.getTabs().addAll(eventsTab, consoleTab);
+
+        SplitPane center = new SplitPane(editorArea, bottomTabs);
         center.setOrientation(Orientation.VERTICAL);
         center.setDividerPositions(0.72);
-        root.setCenter(center);
+        return center;
+    }
 
+    private Node buildLeftPanel() {
+        SplitPane left = new SplitPane(new PalettePane(), tree);
+        left.setOrientation(Orientation.VERTICAL);
+        left.setDividerPositions(0.6);
+        left.setPrefWidth(180);
+        left.setMaxWidth(230);
+        return left;
+    }
+
+    private void buildStatusBar() {
         status.setPadding(new Insets(4, 10, 4, 10));
         cursorPos.setPadding(new Insets(4, 10, 4, 10));
-        cursorPos.setStyle("-fx-text-fill: #808080; -fx-font-family: 'Consolas', monospace;");
-        javafx.scene.layout.Region statusSpacer = new javafx.scene.layout.Region();
-        javafx.scene.layout.HBox.setHgrow(statusSpacer, javafx.scene.layout.Priority.ALWAYS);
-        root.setBottom(new javafx.scene.layout.HBox(status, statusSpacer, cursorPos));
-
-        Scene scene = new Scene(root, 1100, 720);
-        scene.getStylesheets().add(getClass().getResource("/code-highlight.css").toExternalForm());
-        stage.setScene(scene);
-        updateTitle();
+        cursorPos.getStyleClass().add("cursor-pos");
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        HBox bar = new HBox(status, spacer, cursorPos);
+        bar.getStyleClass().add("status-bar");
+        root.setBottom(bar);
     }
 
-    private void bindProject() {
-        refreshFormBox();
-        bindActiveForm();
+    private void showWelcome() {
+        welcomePane.refreshRecents();
+        root.setLeft(null);
+        root.setRight(null);
+        root.setCenter(welcomePane);
     }
 
-    private void bindActiveForm() {
-        canvas.setModel(model);
-        inspector.setModel(model);
-        tree.setModel(model);
-        inspector.showForm();
-        eventEditor.showForm(model);
-        updateRulers();
+    private void showDesigner() {
+        root.setLeft(leftPanel);
+        root.setRight(inspector);
+        root.setCenter(designerCenter);
     }
 
-    private void updateRulers() {
-        hRuler.redraw(model.getWidth());
-        vRuler.redraw(model.getHeight());
+    private boolean designerShown() {
+        return root.getCenter() == designerCenter;
     }
 
-    private void refreshFormBox() {
-        formBoxUpdating = true;
-        formBox.getItems().setAll(project.getForms());
-        formBox.getSelectionModel().select(model);
-        formBoxUpdating = false;
-    }
+    // ------------------------------------------------------------- menus/bar
 
     private MenuBar buildMenuBar() {
         Menu file = new Menu("File");
+        Menu openRecent = new Menu("Open Recent");
+        openRecent.setOnShowing(e -> rebuildRecentMenu(openRecent));
+        rebuildRecentMenu(openRecent);
         file.getItems().addAll(
-                item("New", "Shortcut+N", this::newProject),
+                item("New", "Shortcut+N", () -> { newProject(); showDesigner(); }),
                 item("New from Template…", "Shortcut+Shift+N", this::newFromTemplate),
                 item("Open…", "Shortcut+O", this::openProject),
+                openRecent,
                 item("Save", "Shortcut+S", this::saveProject),
                 item("Save As…", "Shortcut+Shift+S", this::saveProjectAs),
+                new SeparatorMenuItem(),
+                item("Welcome", null, this::showWelcome),
                 new SeparatorMenuItem(),
                 item("Exit", null, stage::close));
 
@@ -199,6 +278,11 @@ public class MainWindow {
                 item("Select All", "Shortcut+A", canvas::selectAll),
                 item("Delete", "Delete", canvas::deleteSelected));
 
+        Menu view = new Menu("View");
+        CheckMenuItem darkItem = new CheckMenuItem("Dark Theme");
+        darkItem.setOnAction(e -> setDarkTheme(darkItem.isSelected()));
+        view.getItems().add(darkItem);
+
         Menu arrange = new Menu("Arrange");
         arrange.getItems().addAll(
                 item("Align Left", null, () -> canvas.align(DesignCanvas.AlignOp.LEFT)),
@@ -209,7 +293,10 @@ public class MainWindow {
                 item("Center Horizontally", null, () -> canvas.align(DesignCanvas.AlignOp.CENTER_H)),
                 item("Center Vertically", null, () -> canvas.align(DesignCanvas.AlignOp.CENTER_V)),
                 new SeparatorMenuItem(),
-                item("Same Size", null, () -> canvas.align(DesignCanvas.AlignOp.SAME_SIZE)));
+                item("Same Size", null, () -> canvas.align(DesignCanvas.AlignOp.SAME_SIZE)),
+                new SeparatorMenuItem(),
+                item("Bring to Front", "Shortcut+Shift+F", () -> zOrder(true)),
+                item("Send to Back", "Shortcut+Shift+B", () -> zOrder(false)));
 
         Menu project = new Menu("Project");
         project.getItems().addAll(
@@ -217,73 +304,62 @@ public class MainWindow {
                 item("Quick Preview", "Shift+F5", this::preview),
                 item("Export Java Code…", "Shortcut+E", this::exportCode),
                 new SeparatorMenuItem(),
+                item("New Form", null, this::addForm),
+                item("Set Active Form as Main", null, this::setActiveFormAsMain),
+                new SeparatorMenuItem(),
                 item("Set App Icon…", null, this::setAppIcon),
                 item("Clear App Icon", null, this::clearAppIcon),
                 new SeparatorMenuItem(),
                 item("Package App…", null, () -> packageTo(AppPackager.OutputType.APP_IMAGE)),
                 item("Package Installer (.exe)…", null, () -> packageTo(AppPackager.OutputType.INSTALLER)));
 
-        return new MenuBar(file, edit, arrange, project);
+        return new MenuBar(file, edit, view, arrange, project);
+    }
+
+    private void rebuildRecentMenu(Menu openRecent) {
+        openRecent.getItems().clear();
+        var recents = RecentProjects.list();
+        if (recents.isEmpty()) {
+            MenuItem none = new MenuItem("No recent projects");
+            none.setDisable(true);
+            openRecent.getItems().add(none);
+            return;
+        }
+        for (Path path : recents) {
+            MenuItem entry = new MenuItem(path.getFileName().toString());
+            entry.setOnAction(e -> openPath(path));
+            openRecent.getItems().add(entry);
+        }
+        openRecent.getItems().add(new SeparatorMenuItem());
+        MenuItem clear = new MenuItem("Clear Recently Opened");
+        clear.setOnAction(e -> RecentProjects.clear());
+        openRecent.getItems().add(clear);
     }
 
     private ToolBar buildToolBar() {
-        Button run = new Button("▶ Run");
+        Button run = iconButton(Feather.PLAY, "Run (F5)");
         run.setOnAction(e -> run());
-        Button preview = new Button("Quick Preview");
+        Button preview = iconButton(Feather.EYE, "Quick Preview (Shift+F5)");
         preview.setOnAction(e -> preview());
-        Button export = new Button("Export Java");
+        Button export = iconButton(Feather.CODE, "Export Java Code");
         export.setOnAction(e -> exportCode());
+        Button pack = iconButton(Feather.PACKAGE, "Package App");
+        pack.setOnAction(e -> packageTo(AppPackager.OutputType.APP_IMAGE));
 
-        formBox.setConverter(new javafx.util.StringConverter<>() {
-            @Override public String toString(FormModel f) {
-                return f == null ? "" : f.getName() + (f.getName().equals(project.getMainForm()) ? " ★" : "");
-            }
-            @Override public FormModel fromString(String s) {
-                return null;
-            }
-        });
-        formBox.setOnAction(e -> {
-            if (formBoxUpdating) {
-                return;
-            }
-            FormModel picked = formBox.getValue();
-            if (picked != null && picked != model) {
-                model = picked;
-                bindActiveForm();
-            }
-        });
-        Button addForm = new Button("+ Form");
-        addForm.setOnAction(e -> {
-            undoManager.checkpoint(null);
-            model = project.addForm();
-            bindProject();
-            markDirty();
-            status.setText("Added " + model.getName());
-        });
-        Button removeForm = new Button("− Form");
-        removeForm.setOnAction(e -> {
-            undoManager.checkpoint(null);
-            if (project.removeForm(model)) {
-                model = project.effectiveMain();
-                bindProject();
-                markDirty();
-            } else {
-                status.setText("A project needs at least one form");
-            }
-        });
-        Button setMain = new Button("Set Main");
-        setMain.setOnAction(e -> {
-            undoManager.checkpoint(null);
-            project.setMainForm(model.getName());
-            refreshFormBox();
-            markDirty();
-            status.setText(model.getName() + " is now the startup form");
-        });
+        Button addForm = iconButton(Feather.PLUS, "New Form");
+        addForm.setOnAction(e -> addForm());
+        Button setMain = iconButton(Feather.STAR, "Set Active Form as Main");
+        setMain.setOnAction(e -> setActiveFormAsMain());
 
-        javafx.scene.control.ComboBox<Integer> zoomBox = new javafx.scene.control.ComboBox<>();
+        ToggleButton snap = new ToggleButton(null, new FontIcon(Feather.GRID));
+        snap.setSelected(true);
+        snap.setTooltip(new Tooltip("Snap to grid"));
+        snap.setOnAction(e -> canvas.setSnapEnabled(snap.isSelected()));
+
+        ComboBox<Integer> zoomBox = new ComboBox<>();
         zoomBox.getItems().addAll(50, 75, 100, 125, 150, 200);
         zoomBox.setValue(100);
-        zoomBox.setConverter(new javafx.util.StringConverter<>() {
+        zoomBox.setConverter(new StringConverter<>() {
             @Override public String toString(Integer v) {
                 return v == null ? "" : v + "%";
             }
@@ -295,15 +371,23 @@ public class MainWindow {
             Integer percent = zoomBox.getValue();
             if (percent != null) {
                 double z = percent / 100.0;
-                rulerGrid.getTransforms().setAll(new javafx.scene.transform.Scale(z, z));
+                rulerGrid.getTransforms().setAll(new Scale(z, z));
             }
         });
 
-        return new ToolBar(run, preview, export,
-                new javafx.scene.control.Separator(),
-                new Label("Form:"), formBox, addForm, removeForm, setMain,
-                new javafx.scene.control.Separator(),
-                new Label("Zoom:"), zoomBox);
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        return new ToolBar(run, preview, export, pack,
+                new Separator(), addForm, setMain,
+                new Separator(), snap,
+                spacer, new Label("Zoom:"), zoomBox);
+    }
+
+    private Button iconButton(Feather glyph, String tooltip) {
+        Button button = new Button(null, new FontIcon(glyph));
+        button.setTooltip(new Tooltip(tooltip));
+        return button;
     }
 
     private MenuItem item(String text, String accelerator, Runnable action) {
@@ -314,6 +398,128 @@ public class MainWindow {
         item.setOnAction(e -> action.run());
         return item;
     }
+
+    private void setDarkTheme(boolean dark) {
+        darkTheme = dark;
+        Application.setUserAgentStylesheet(dark
+                ? new PrimerDark().getUserAgentStylesheet()
+                : new PrimerLight().getUserAgentStylesheet());
+        var rootClasses = stage.getScene().getRoot().getStyleClass();
+        rootClasses.remove("dark");
+        if (dark) {
+            rootClasses.add("dark");
+        }
+    }
+
+    // ------------------------------------------------------------ form tabs
+
+    private void bindProject() {
+        refreshFormTabs();
+        bindActiveForm();
+    }
+
+    private void bindActiveForm() {
+        canvas.setModel(model);
+        inspector.setModel(model);
+        tree.setModel(model);
+        inspector.showForm();
+        eventEditor.showForm(model);
+        updateRulers();
+    }
+
+    private void refreshFormTabs() {
+        formTabsUpdating = true;
+        formTabs.getTabs().clear();
+        for (FormModel form : project.getForms()) {
+            Tab tab = new Tab(tabTitle(form));
+            tab.setUserData(form);
+            tab.setOnCloseRequest(e -> {
+                e.consume();
+                deleteForm(form);
+            });
+            MenuItem setMain = new MenuItem("Set as Main");
+            setMain.setOnAction(e -> {
+                undoManager.checkpoint(null);
+                project.setMainForm(form.getName());
+                refreshFormTabs();
+                markDirty();
+            });
+            tab.setContextMenu(new ContextMenu(setMain));
+            formTabs.getTabs().add(tab);
+            if (form == model) {
+                formTabs.getSelectionModel().select(tab);
+            }
+        }
+        formTabsUpdating = false;
+    }
+
+    private String tabTitle(FormModel form) {
+        return form.getName() + (form.getName().equals(project.getMainForm()) ? " ★" : "");
+    }
+
+    private void addForm() {
+        undoManager.checkpoint(null);
+        model = project.addForm();
+        bindProject();
+        markDirty();
+        status.setText("Added " + model.getName());
+    }
+
+    private void deleteForm(FormModel form) {
+        if (project.getForms().size() <= 1) {
+            status.setText("A project needs at least one form");
+            return;
+        }
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Delete form \"" + form.getName() + "\" and everything on it?");
+        confirm.setHeaderText("Delete form");
+        if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
+            return;
+        }
+        undoManager.checkpoint(null);
+        project.removeForm(form);
+        if (model == form) {
+            model = project.effectiveMain();
+        }
+        bindProject();
+        markDirty();
+    }
+
+    private void setActiveFormAsMain() {
+        undoManager.checkpoint(null);
+        project.setMainForm(model.getName());
+        refreshFormTabs();
+        markDirty();
+        status.setText(model.getName() + " is now the startup form");
+    }
+
+    private void updateRulers() {
+        hRuler.redraw(model.getWidth());
+        vRuler.redraw(model.getHeight());
+    }
+
+    // -------------------------------------------------------------- z-order
+
+    private void zOrder(boolean front) {
+        var selected = canvas.getSelectionList();
+        if (selected.isEmpty()) {
+            return;
+        }
+        undoManager.checkpoint(null);
+        for (var c : selected) {
+            if (front) {
+                model.toFront(c);
+            } else {
+                model.toBack(c);
+            }
+        }
+        canvas.rebuildPreservingSelection();
+        tree.refresh();
+        tree.select(canvas.getSelected());
+        markDirty();
+    }
+
+    // ------------------------------------------------------------- projects
 
     private void newProject() {
         project = ProjectModel.withDefaultForm();
@@ -327,40 +533,49 @@ public class MainWindow {
     }
 
     private void newFromTemplate() {
-        var templates = dev.dragifier.model.Templates.all();
-        javafx.scene.control.ChoiceDialog<String> dialog = new javafx.scene.control.ChoiceDialog<>(
-                templates.get(0).name(), templates.stream().map(t -> t.name()).toList());
+        var templates = Templates.all();
+        ChoiceDialog<String> dialog = new ChoiceDialog<>(
+                templates.get(0).name(), templates.stream().map(Templates.Template::name).toList());
         dialog.setTitle("New from Template");
         dialog.setHeaderText("Choose a starter template");
         dialog.setContentText("Template:");
         dialog.showAndWait().ifPresent(name -> templates.stream()
-                .filter(t -> t.name().equals(name)).findFirst().ifPresent(t -> {
-                    project = t.factory().get();
-                    model = project.effectiveMain();
-                    currentFile = null;
-                    dirty = false;
-                    undoManager.clear();
-                    bindProject();
-                    updateTitle();
-                    status.setText("Created from template: " + name);
-                }));
+                .filter(t -> t.name().equals(name)).findFirst()
+                .ifPresent(this::loadTemplate));
+    }
+
+    private void loadTemplate(Templates.Template template) {
+        project = template.factory().get();
+        model = project.effectiveMain();
+        currentFile = null;
+        dirty = false;
+        undoManager.clear();
+        bindProject();
+        showDesigner();
+        updateTitle();
+        status.setText("Created from template: " + template.name());
     }
 
     private void openProject() {
         FileChooser chooser = projectChooser();
         File file = chooser.showOpenDialog(stage);
-        if (file == null) {
-            return;
+        if (file != null) {
+            openPath(file.toPath());
         }
+    }
+
+    private void openPath(Path path) {
         try {
-            project = ProjectIO.load(file.toPath());
+            project = ProjectIO.load(path);
             model = project.effectiveMain();
-            currentFile = file.toPath();
+            currentFile = path;
             dirty = false;
             undoManager.clear();
+            RecentProjects.add(path);
             bindProject();
+            showDesigner();
             updateTitle();
-            status.setText("Opened " + file.getName());
+            status.setText("Opened " + path.getFileName());
         } catch (Exception ex) {
             error("Could not open project", ex);
         }
@@ -374,6 +589,7 @@ public class MainWindow {
         try {
             ProjectIO.save(project, currentFile);
             dirty = false;
+            RecentProjects.add(currentFile);
             updateTitle();
             status.setText("Saved " + currentFile.getFileName());
         } catch (IOException ex) {
@@ -392,6 +608,32 @@ public class MainWindow {
         saveProject();
     }
 
+    private FileChooser projectChooser() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Dragifier Project");
+        chooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("Dragifier project (*.dragifier)", "*.dragifier"));
+        return chooser;
+    }
+
+    // ------------------------------------------------------- run/export/package
+
+    private void run() {
+        console.clear();
+        bottomTabs.getSelectionModel().select(1);
+        AppRunner.run(project,
+                s -> {
+                    status.setText(s);
+                    console.append("[dragifier] " + s);
+                },
+                this::errorText,
+                console::append);
+    }
+
+    private void preview() {
+        PreviewWindow.show(model, stage);
+    }
+
     private void exportCode() {
         DirectoryChooser chooser = new DirectoryChooser();
         chooser.setTitle("Export Java Code (one file per form plus Main)");
@@ -408,10 +650,6 @@ public class MainWindow {
         } catch (IOException ex) {
             error("Could not export code", ex);
         }
-    }
-
-    private void preview() {
-        PreviewWindow.show(model, stage);
     }
 
     private void setAppIcon() {
@@ -456,7 +694,7 @@ public class MainWindow {
             return;
         }
         AppPackager.packageApp(project, dir.toPath(), type, status::setText, this::errorText,
-                exe -> offerOpenFolder(exe));
+                this::offerOpenFolder);
     }
 
     private void offerOpenFolder(Path exe) {
@@ -465,7 +703,7 @@ public class MainWindow {
         alert.setHeaderText("Packaged successfully");
         alert.setContentText(exe + "\n\nOpen the output folder?");
         alert.showAndWait().ifPresent(button -> {
-            if (button == javafx.scene.control.ButtonType.OK) {
+            if (button == ButtonType.OK) {
                 try {
                     new ProcessBuilder("explorer.exe", "/select,", exe.toString()).start();
                 } catch (IOException ignored) {
@@ -475,9 +713,7 @@ public class MainWindow {
         });
     }
 
-    private void run() {
-        AppRunner.run(project, status::setText, this::errorText);
-    }
+    // ------------------------------------------------------------ undo/misc
 
     private void undo() {
         String snapshot = undoManager.undo();
@@ -508,14 +744,6 @@ public class MainWindow {
         markDirty();
     }
 
-    private FileChooser projectChooser() {
-        FileChooser chooser = new FileChooser();
-        chooser.setTitle("Dragifier Project");
-        chooser.getExtensionFilters().add(
-                new FileChooser.ExtensionFilter("Dragifier project (*.dragifier)", "*.dragifier"));
-        return chooser;
-    }
-
     private void markDirty() {
         dirty = true;
         updateTitle();
@@ -540,7 +768,7 @@ public class MainWindow {
         alert.setHeaderText(message);
         TextArea area = new TextArea(details);
         area.setEditable(false);
-        area.setStyle("-fx-font-family: 'Consolas', monospace; -fx-font-size: 12px;");
+        area.getStyleClass().add("console-area");
         alert.getDialogPane().setContent(area);
         alert.setResizable(true);
         alert.showAndWait();

@@ -31,11 +31,10 @@ public class Ruler extends javafx.scene.canvas.Canvas {
         }
         GraphicsContext g = getGraphicsContext2D();
         g.clearRect(0, 0, getWidth(), getHeight());
-        g.setFill(Color.web("#efefef"));
-        g.fillRect(0, 0, getWidth(), getHeight());
-        g.setStroke(Color.web("#b0b0b0"));
+        // transparent background + mid-gray marks: legible on light and dark themes
+        g.setStroke(Color.gray(0.55));
         g.setLineWidth(1);
-        g.setFill(Color.web("#707070"));
+        g.setFill(Color.gray(0.55));
         g.setFont(Font.font("Consolas", 9));
         g.setTextAlign(TextAlignment.LEFT);
         g.setTextBaseline(VPos.TOP);

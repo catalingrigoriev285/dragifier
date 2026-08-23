@@ -1,16 +1,25 @@
 .code-area {
-    -fx-font-family: 'Consolas', 'Courier New', monospace;
+    -fx-font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
     -fx-font-size: 12px;
-    -fx-background-color: #fdfdfd;
+    -fx-background-color: -color-bg-default;
+}
+
+.code-area .text {
+    -fx-fill: -color-fg-default;
+}
+
+.code-area .caret {
+    -fx-stroke: -color-fg-default;
 }
 
 .code-area .lineno {
-    -fx-font-family: 'Consolas', 'Courier New', monospace;
+    -fx-font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
     -fx-font-size: 11px;
-    -fx-background-color: #f0f0f0;
-    -fx-text-fill: #a0a0a0;
+    -fx-background-color: -color-bg-subtle;
+    -fx-text-fill: -color-fg-subtle;
 }
 
+/* light theme token colors (IntelliJ Light-ish) */
 .code-area .keyword {
     -fx-fill: #0033b3;
     -fx-font-weight: bold;
@@ -31,10 +40,31 @@
 
 .code-area .paren,
 .code-area .brace,
-.code-area .bracket {
+.code-area .bracket,
+.code-area .semicolon {
     -fx-fill: #444444;
 }
 
-.code-area .semicolon {
-    -fx-fill: #444444;
+/* dark theme token colors (VS Code Dark+-ish); .dark is set on the scene root */
+.dark .code-area .keyword {
+    -fx-fill: #569cd6;
+}
+
+.dark .code-area .string {
+    -fx-fill: #ce9178;
+}
+
+.dark .code-area .comment {
+    -fx-fill: #6a9955;
+}
+
+.dark .code-area .number {
+    -fx-fill: #b5cea8;
+}
+
+.dark .code-area .paren,
+.dark .code-area .brace,
+.dark .code-area .bracket,
+.dark .code-area .semicolon {
+    -fx-fill: #d4d4d4;
 }

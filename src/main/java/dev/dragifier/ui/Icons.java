@@ -1,0 +1,30 @@
+package dev.dragifier.ui;
+
+import dev.dragifier.model.ComponentType;
+import org.kordamp.ikonli.feather.Feather;
+import org.kordamp.ikonli.javafx.FontIcon;
+
+/** One place for the per-component-type icons used by the palette and tree. */
+public final class Icons {
+
+    private Icons() {}
+
+    public static FontIcon forType(ComponentType type) {
+        Feather glyph = switch (type) {
+            case BUTTON -> Feather.MOUSE_POINTER;
+            case LABEL -> Feather.TYPE;
+            case TEXT_FIELD -> Feather.EDIT_3;
+            case TEXT_AREA -> Feather.FILE_TEXT;
+            case CHECK_BOX -> Feather.CHECK_SQUARE;
+            case SLIDER -> Feather.SLIDERS;
+            case PANEL -> Feather.LAYOUT;
+            case COMBO_BOX -> Feather.CHEVRON_DOWN;
+            case LIST_VIEW -> Feather.LIST;
+            case RADIO_BUTTON -> Feather.DISC;
+            case PROGRESS_BAR -> Feather.ACTIVITY;
+            case HYPERLINK -> Feather.LINK;
+            case IMAGE_VIEW -> Feather.IMAGE;
+        };
+        return new FontIcon(glyph);
+    }
+}

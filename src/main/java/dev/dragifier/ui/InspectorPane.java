@@ -31,7 +31,12 @@ public class InspectorPane extends VBox {
 
     private final Label header = new Label();
 
-    private final GridPane componentGrid = new GridPane();
+    private final GridPane layoutGrid = new GridPane();
+    private final GridPane appearanceGrid = new GridPane();
+    private final GridPane behaviorGrid = new GridPane();
+    private final javafx.scene.control.TitledPane layoutSection = new javafx.scene.control.TitledPane("Layout", layoutGrid);
+    private final javafx.scene.control.TitledPane appearanceSection = new javafx.scene.control.TitledPane("Appearance", appearanceGrid);
+    private final javafx.scene.control.TitledPane behaviorSection = new javafx.scene.control.TitledPane("Behavior", behaviorGrid);
     private final TextField xField = new TextField();
     private final TextField yField = new TextField();
     private final TextField wField = new TextField();
@@ -53,6 +58,7 @@ public class InspectorPane extends VBox {
     private Label alignLabel;
 
     private final GridPane formGrid = new GridPane();
+    private final javafx.scene.control.TitledPane formSection = new javafx.scene.control.TitledPane("Form", formGrid);
     private final TextField nameField = new TextField();
     private final TextField titleField = new TextField();
     private final TextField formWField = new TextField();
@@ -62,37 +68,43 @@ public class InspectorPane extends VBox {
     public InspectorPane() {
         setSpacing(10);
         setPadding(new Insets(10));
-        setPrefWidth(220);
-        setStyle("-fx-background-color: #f5f5f5; -fx-border-color: #d0d0d0; -fx-border-width: 0 0 0 1;");
+        setPrefWidth(240);
+        getStyleClass().addAll("side-panel", "inspector");
 
-        header.setStyle("-fx-font-weight: bold; -fx-font-size: 13px;");
+        header.getStyleClass().add("panel-header");
 
-        setupGrid(componentGrid);
+        setupGrid(layoutGrid);
         int row = 0;
-        addRow(componentGrid, row++, "X", xField);
-        addRow(componentGrid, row++, "Y", yField);
-        addRow(componentGrid, row++, "Width", wField);
-        addRow(componentGrid, row++, "Height", hField);
-        addRow(componentGrid, row++, "Text", textField);
-        addRow(componentGrid, row++, "Font size", fontField);
-        addRow(componentGrid, row++, "Text color", textColorPicker);
-        componentGrid.add(customBg, 0, row++, 2, 1);
-        addRow(componentGrid, row++, "Background", bgPicker);
+        addRow(layoutGrid, row++, "X", xField);
+        addRow(layoutGrid, row++, "Y", yField);
+        addRow(layoutGrid, row++, "Width", wField);
+        addRow(layoutGrid, row, "Height", hField);
+
+        setupGrid(appearanceGrid);
+        row = 0;
+        addRow(appearanceGrid, row++, "Text", textField);
+        addRow(appearanceGrid, row++, "Font size", fontField);
+        addRow(appearanceGrid, row++, "Text color", textColorPicker);
+        appearanceGrid.add(customBg, 0, row++, 2, 1);
+        addRow(appearanceGrid, row++, "Background", bgPicker);
+        alignBox.getItems().addAll("Default", "Left", "Center", "Right");
+        alignLabel = addRow(appearanceGrid, row, "Align", alignBox);
+
+        setupGrid(behaviorGrid);
+        row = 0;
+        addRow(behaviorGrid, row++, "Tooltip", tooltipField);
+        behaviorGrid.add(disabledBox, 0, row++, 2, 1);
         itemsArea.setPrefRowCount(3);
         itemsArea.setPrefWidth(110);
         itemsArea.setPromptText("One item per line");
-        itemsLabel = addRow(componentGrid, row++, "Items", itemsArea);
-        valueLabel = addRow(componentGrid, row++, "Value %", valueField);
+        itemsLabel = addRow(behaviorGrid, row++, "Items", itemsArea);
+        valueLabel = addRow(behaviorGrid, row++, "Value %", valueField);
         javafx.scene.control.Button chooseImage = new javafx.scene.control.Button("Choose…");
         javafx.scene.control.Button clearImage = new javafx.scene.control.Button("Clear");
         chooseImage.setOnAction(e -> pickImage());
         clearImage.setOnAction(e -> applyComponent(() -> current.setImageData("")));
         imageButtons.getChildren().addAll(chooseImage, clearImage);
-        imageLabel = addRow(componentGrid, row++, "Image", imageButtons);
-        addRow(componentGrid, row++, "Tooltip", tooltipField);
-        alignBox.getItems().addAll("Default", "Left", "Center", "Right");
-        alignLabel = addRow(componentGrid, row++, "Align", alignBox);
-        componentGrid.add(disabledBox, 0, row, 2, 1);
+        imageLabel = addRow(behaviorGrid, row, "Image", imageButtons);
 
         setupGrid(formGrid);
         addRow(formGrid, 0, "Name", nameField);
@@ -100,11 +112,28 @@ public class InspectorPane extends VBox {
         addRow(formGrid, 2, "Width", formWField);
         addRow(formGrid, 3, "Height", formHField);
 
-        getChildren().addAll(header, componentGrid, formGrid);
+        for (var section : java.util.List.of(layoutSection, appearanceSection, behaviorSection, formSection)) {
+            section.setAnimated(false);
+        }
+        VBox sections = new VBox(4, layoutSection, appearanceSection, behaviorSection, formSection);
+        javafx.scene.control.ScrollPane scroll = new javafx.scene.control.ScrollPane(sections);
+        scroll.setFitToWidth(true);
+        scroll.setStyle("-fx-background-color: transparent;");
+        VBox.setVgrow(scroll, javafx.scene.layout.Priority.ALWAYS);
+        getChildren().addAll(header, scroll);
 
         wireComponentEdits();
         wireFormEdits();
         showForm();
+    }
+
+    private void showSections(boolean component, boolean form) {
+        for (var section : java.util.List.of(layoutSection, appearanceSection, behaviorSection)) {
+            section.setVisible(component);
+            section.setManaged(component);
+        }
+        formSection.setVisible(form);
+        formSection.setManaged(form);
     }
 
     private void setupGrid(GridPane grid) {
@@ -182,10 +211,7 @@ public class InspectorPane extends VBox {
             case "RIGHT" -> "Right";
             default -> "Default";
         });
-        componentGrid.setVisible(true);
-        componentGrid.setManaged(true);
-        formGrid.setVisible(false);
-        formGrid.setManaged(false);
+        showSections(true, false);
         updating = false;
     }
 
@@ -193,10 +219,7 @@ public class InspectorPane extends VBox {
         current = null;
         updating = true;
         header.setText(count + " components selected");
-        componentGrid.setVisible(false);
-        componentGrid.setManaged(false);
-        formGrid.setVisible(false);
-        formGrid.setManaged(false);
+        showSections(false, false);
         updating = false;
     }
 
@@ -210,10 +233,7 @@ public class InspectorPane extends VBox {
             formWField.setText(num(model.getWidth()));
             formHField.setText(num(model.getHeight()));
         }
-        componentGrid.setVisible(false);
-        componentGrid.setManaged(false);
-        formGrid.setVisible(true);
-        formGrid.setManaged(true);
+        showSections(false, true);
         updating = false;
     }
 
