@@ -16,6 +16,9 @@ dependencies {
     implementation("io.github.mkpaz:atlantafx-base:2.1.0")
     implementation("org.kordamp.ikonli:ikonli-javafx:12.4.0")
     implementation("org.kordamp.ikonli:ikonli-feather-pack:12.4.0")
+    // not IDE modules — carried along so generated apps can use WebView/media
+    implementation("org.openjfx:javafx-web:26.0.2:win")
+    implementation("org.openjfx:javafx-media:26.0.2:win")
 }
 
 java {
@@ -48,5 +51,8 @@ tasks.register<JavaExec>("packageSmoke") {
     mainClass = "dev.dragifier.PackageSmoke"
     if (project.hasProperty("packageDest")) {
         args(project.property("packageDest").toString())
+    }
+    if (project.hasProperty("packageWeb")) {
+        args("--with-web")
     }
 }

@@ -15,7 +15,9 @@ public record EventSpec(String key, String displayName, String hint, Kind kind, 
         /** Wired via {@code valueProperty().addListener((obs, oldValue, newValue) -> { ... })}. */
         VALUE_LISTENER,
         /** Wired via {@code getSelectionModel().selectedItemProperty().addListener(...)}. */
-        SELECTION_LISTENER
+        SELECTION_LISTENER,
+        /** Timer tick — the handler body is embedded in the Timeline's KeyFrame. */
+        TIMER_TICK
     }
 
     /** Events of the form itself (edited when nothing is selected). */
@@ -48,6 +50,12 @@ public record EventSpec(String key, String displayName, String hint, Kind kind, 
             case PROGRESS_BAR -> List.of();
             case IMAGE_VIEW -> List.of(
                     new EventSpec("onMouseClicked", "On click", "(event) -> { ... }", Kind.SETTER, "setOnMouseClicked"));
+            case TIMER -> List.of(
+                    new EventSpec("onTick", "On tick", "(event) -> { ... }", Kind.TIMER_TICK, null));
+            case TABLE_VIEW -> List.of(
+                    new EventSpec("onSelect", "On select",
+                            "(obs, oldValue, newValue) -> { ... }", Kind.SELECTION_LISTENER, null));
+            case WEB_VIEW, MEDIA_PLAYER -> List.of();
         };
     }
 }

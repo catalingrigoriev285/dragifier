@@ -126,9 +126,27 @@ gradlew run
   (also in File → Open Recent, persisted between sessions).
 - **Z-order** (Arrange → Bring to Front / Send to Back) and a **grid-snap toggle** in the toolbar.
 
+## What works (milestone 15 — DevelNext parity round)
+
+- **`UI` helper API** in every generated app: `UI.alert / confirm / prompt`, clipboard,
+  file dialogs, `UI.openLink`, `UI.row(...)` for tables. **Insert ▾** menu in the event
+  editor drops ready-made snippets (dialogs, open form, close window, println…).
+- **Timer component** (non-visual, VB-style): interval in ms, "On tick" event compiled
+  to a JavaFX Timeline; "Disabled" = don't start automatically (`timer1.play()` in code).
+- **New components**: **Table** (columns editor, rows via `table1.getItems().add(UI.row("Ana", "20"))`,
+  On select), **WebView** (Text property = start URL), **Media player** (audio/video file
+  bundled into the app, autoplay unless Disabled). WebView apps automatically run and
+  package with JavaFX on the classpath (javafx.web can't be jlinked on JDKs without
+  jdk.jsobject); everything else keeps the lean jlinked runtime.
+- **Autocomplete** in the code editor: Ctrl+Space (or typing `.`) suggests component ids,
+  `UI`/`stage`, and per-type methods; Enter/Tab inserts, Esc closes.
+- **Anchors + resizable forms**: a "Resizable window" form option and L/T/R/B anchor
+  checkboxes per component — anchor left+right (or top+bottom) to stretch with the
+  window, classic RAD behavior. Focus (tab) order follows z-order (Arrange menu).
+
 ## Roadmap
 
-- Open to ideas
+- Deferred by choice: behaviors (no-code animations/drag), auto-save/backups, game features
 
 ## Project layout
 

@@ -28,6 +28,13 @@ public final class PackageSmoke {
         button.setText("Click");
         button.getEvents().put("onAction", "label1.setText(\"Clicked from a packaged app\");");
 
+        boolean withWeb = java.util.Arrays.asList(args).contains("--with-web");
+        if (withWeb) {
+            FormComponent web = form.create(ComponentType.WEB_VIEW, 24, 110);
+            web.setText("https://example.com");
+            System.out.println("  (classpath-mode packaging: project includes a WebView)");
+        }
+
         Path dest = args.length > 0
                 ? Path.of(args[0])
                 : Files.createTempDirectory("dragifier-package-smoke");

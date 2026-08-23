@@ -44,9 +44,19 @@ public final class Renderer {
             case PROGRESS_BAR -> new ProgressBar(0);
             case HYPERLINK -> new Hyperlink();
             case IMAGE_VIEW -> new ImageBox();
+            case TIMER -> badge(org.kordamp.ikonli.feather.Feather.CLOCK);
+            case TABLE_VIEW -> new javafx.scene.control.TableView<javafx.collections.ObservableList<String>>();
+            case WEB_VIEW -> badge(org.kordamp.ikonli.feather.Feather.GLOBE);
+            case MEDIA_PLAYER -> badge(org.kordamp.ikonli.feather.Feather.PLAY_CIRCLE);
         };
         apply(node, c);
         return node;
+    }
+
+    private static Label badge(org.kordamp.ikonli.feather.Feather glyph) {
+        Label badge = new Label("", new org.kordamp.ikonli.javafx.FontIcon(glyph));
+        badge.setAlignment(javafx.geometry.Pos.CENTER);
+        return badge;
     }
 
     @SuppressWarnings("unchecked")
@@ -67,6 +77,12 @@ public final class Renderer {
             bar.setProgress(c.getValue() / 100.0);
         } else if (node instanceof ImageBox box) {
             box.update(c);
+        } else if (node instanceof javafx.scene.control.TableView<?> table) {
+            var typed = (javafx.scene.control.TableView<javafx.collections.ObservableList<String>>) table;
+            typed.getColumns().clear();
+            for (String name : lines(c.getColumns())) {
+                typed.getColumns().add(new javafx.scene.control.TableColumn<>(name));
+            }
         }
         if (node instanceof Labeled labeled) {
             labeled.setAlignment(posFor(c));
@@ -91,8 +107,11 @@ public final class Renderer {
             case "LEFT" -> javafx.geometry.Pos.CENTER_LEFT;
             case "CENTER" -> javafx.geometry.Pos.CENTER;
             case "RIGHT" -> javafx.geometry.Pos.CENTER_RIGHT;
-            default -> c.getType() == ComponentType.BUTTON
-                    ? javafx.geometry.Pos.CENTER : javafx.geometry.Pos.CENTER_LEFT;
+            default -> switch (c.getType()) {
+                case BUTTON, TIMER, MEDIA_PLAYER -> javafx.geometry.Pos.CENTER;
+                case WEB_VIEW -> javafx.geometry.Pos.CENTER; // badge shows the URL centered
+                default -> javafx.geometry.Pos.CENTER_LEFT;
+            };
         };
     }
 
@@ -115,7 +134,12 @@ public final class Renderer {
 
     /** Non-blank lines of the component's items text. */
     public static List<String> itemList(FormComponent c) {
-        return c.getItems().lines().map(String::trim).filter(s -> !s.isEmpty()).toList();
+        return lines(c.getItems());
+    }
+
+    /** Non-blank trimmed lines of a multi-line property value. */
+    public static List<String> lines(String value) {
+        return value.lines().map(String::trim).filter(s -> !s.isEmpty()).toList();
     }
 
     /** CSS style string for a component; shared with the code generator. */
@@ -131,6 +155,10 @@ public final class Renderer {
             style.append(" -fx-background-color: #f4f4f4; -fx-border-color: #c0c0c0;");
         } else if (c.getType() == ComponentType.IMAGE_VIEW && c.getImageData().isEmpty()) {
             style.append(" -fx-border-color: #c0c0c0; -fx-border-style: dashed;");
+        } else if (c.getType() == ComponentType.TIMER
+                || c.getType() == ComponentType.WEB_VIEW
+                || c.getType() == ComponentType.MEDIA_PLAYER) {
+            style.append(" -fx-border-color: #c0c0c0; -fx-border-style: dashed; -fx-background-color: #f4f4f422;");
         }
         return style.toString();
     }

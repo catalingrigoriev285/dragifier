@@ -24,6 +24,10 @@ public final class Icons {
             case PROGRESS_BAR -> Feather.ACTIVITY;
             case HYPERLINK -> Feather.LINK;
             case IMAGE_VIEW -> Feather.IMAGE;
+            case TIMER -> Feather.CLOCK;
+            case TABLE_VIEW -> Feather.COLUMNS;
+            case WEB_VIEW -> Feather.GLOBE;
+            case MEDIA_PLAYER -> Feather.PLAY_CIRCLE;
         };
         return new FontIcon(glyph);
     }

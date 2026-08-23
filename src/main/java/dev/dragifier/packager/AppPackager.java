@@ -5,6 +5,7 @@ import dev.dragifier.model.ProjectModel;
 import dev.dragifier.runner.AppRunner;
 import javafx.application.Platform;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -83,7 +84,27 @@ public final class AppPackager {
         String mainClass = compiled.className();
 
         status.accept("Creating jar…");
-        Path inputDir = createJar(compiled.dir(), mainClass);
+        boolean classpathMode = AppRunner.usesWeb(project);
+        String modulePath = AppRunner.javafxModulePath();
+        List<String> extraJars = new ArrayList<>();
+        if (classpathMode && modulePath != null) {
+            for (String entry : modulePath.split(java.util.regex.Pattern.quote(File.pathSeparator))) {
+                Path jar = Path.of(entry);
+                if (Files.isRegularFile(jar)) {
+                    extraJars.add(jar.getFileName().toString());
+                }
+            }
+        }
+        Path inputDir = createJar(compiled.dir(), mainClass, extraJars);
+        if (classpathMode && modulePath != null) {
+            for (String entry : modulePath.split(java.util.regex.Pattern.quote(File.pathSeparator))) {
+                Path jar = Path.of(entry);
+                if (Files.isRegularFile(jar)) {
+                    Files.copy(jar, inputDir.resolve(jar.getFileName()),
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+        }
 
         status.accept("Packaging with jpackage (this takes a minute)…");
         List<String> cmd = new ArrayList<>(List.of(
@@ -94,7 +115,8 @@ public final class AppPackager {
                 "--main-jar", "app.jar",
                 "--main-class", mainClass,
                 "--dest", destDir.toString(),
-                "--java-options", "--enable-native-access=javafx.graphics"));
+                "--java-options",
+                classpathMode ? "--enable-native-access=ALL-UNNAMED" : "--enable-native-access=javafx.graphics"));
         if (type == OutputType.INSTALLER) {
             cmd.addAll(List.of("--app-version", "1.0", "--win-shortcut", "--win-menu"));
         }
@@ -103,9 +125,13 @@ public final class AppPackager {
             Files.write(ico, java.util.Base64.getDecoder().decode(project.getIconData()));
             cmd.addAll(List.of("--icon", ico.toString()));
         }
-        String modulePath = AppRunner.javafxModulePath();
-        if (modulePath != null) {
-            cmd.addAll(List.of("--module-path", modulePath, "--add-modules", "javafx.controls"));
+        if (classpathMode && modulePath != null) {
+            // javafx.web can't be jlinked on JDKs without jdk.jsobject: the JavaFX
+            // jars ship in the app dir (classpath) atop a general-purpose runtime
+            cmd.addAll(List.of("--add-modules",
+                    "java.se,jdk.unsupported,jdk.charsets,jdk.crypto.ec,jdk.crypto.cryptoki,jdk.xml.dom"));
+        } else if (modulePath != null) {
+            cmd.addAll(List.of("--module-path", modulePath, "--add-modules", AppRunner.addModulesFor(project)));
         }
         Process process = new ProcessBuilder(cmd).redirectErrorStream(true).start();
         String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
@@ -125,18 +151,21 @@ public final class AppPackager {
     }
 
     /** Jars the compiled classes into {@code <classesDir>/jar-input/app.jar} and returns the input dir. */
-    private static Path createJar(Path classesDir, String mainClass) throws IOException {
+    private static Path createJar(Path classesDir, String mainClass, List<String> classPathJars) throws IOException {
         Path inputDir = Files.createDirectory(classesDir.resolve("jar-input"));
         Path jar = inputDir.resolve("app.jar");
         Manifest manifest = new Manifest();
         manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
         manifest.getMainAttributes().put(Attributes.Name.MAIN_CLASS, mainClass);
+        if (!classPathJars.isEmpty()) {
+            manifest.getMainAttributes().put(Attributes.Name.CLASS_PATH, String.join(" ", classPathJars));
+        }
         try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jar), manifest);
              Stream<Path> files = Files.walk(classesDir)) {
             for (Path p : (Iterable<Path>) files::iterator) {
                 if (Files.isRegularFile(p)
                         && (p.toString().endsWith(".class") || p.toString().endsWith(".img")
-                            || p.toString().endsWith(".png"))) {
+                            || p.toString().endsWith(".png") || p.toString().endsWith(".media"))) {
                     out.putNextEntry(new ZipEntry(classesDir.relativize(p).toString().replace('\\', '/')));
                     out.write(Files.readAllBytes(p));
                     out.closeEntry();

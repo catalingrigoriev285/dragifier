@@ -19,6 +19,8 @@ import java.util.Map;
 public final class JavaCodeGenerator {
 
     public static final String MAIN_CLASS = "Main";
+    /** Entry point that does not extend Application, so classpath launches work too. */
+    public static final String LAUNCHER_CLASS = "Launcher";
     public static final String ICON_RESOURCE = "app_icon.png";
 
     private JavaCodeGenerator() {}
@@ -50,6 +52,13 @@ public final class JavaCodeGenerator {
             sources.put(className(form) + ".java", formSource(project, form));
         }
         sources.put(MAIN_CLASS + ".java", mainSource(project));
+        sources.put(LAUNCHER_CLASS + ".java",
+                "public class " + LAUNCHER_CLASS + " {\n"
+                + "    public static void main(String[] args) {\n"
+                + "        javafx.application.Application.launch(" + MAIN_CLASS + ".class, args);\n"
+                + "    }\n"
+                + "}\n");
+        sources.put(RuntimeApi.FILE_NAME, RuntimeApi.SOURCE);
         return sources;
     }
 
@@ -70,13 +79,25 @@ public final class JavaCodeGenerator {
     private static String formSource(ProjectModel project, FormModel form) {
         String cls = className(form);
         StringBuilder out = new StringBuilder();
+        out.append("import javafx.animation.Animation;\n");
+        out.append("import javafx.animation.KeyFrame;\n");
+        out.append("import javafx.animation.Timeline;\n");
+        out.append("import javafx.beans.property.ReadOnlyStringWrapper;\n");
+        out.append("import javafx.collections.ObservableList;\n");
         out.append("import javafx.geometry.Pos;\n");
         out.append("import javafx.scene.Scene;\n");
         out.append("import javafx.scene.control.*;\n");
         out.append("import javafx.scene.image.Image;\n");
         out.append("import javafx.scene.image.ImageView;\n");
+        out.append("import javafx.scene.layout.AnchorPane;\n");
         out.append("import javafx.scene.layout.Pane;\n");
-        out.append("import javafx.stage.Stage;\n\n");
+        out.append("import javafx.scene.media.Media;\n");
+        out.append("import javafx.scene.media.MediaPlayer;\n");
+        out.append("import javafx.scene.media.MediaView;\n");
+        out.append("import javafx.scene.web.WebView;\n");
+        out.append("import javafx.stage.Stage;\n");
+        out.append("import javafx.util.Duration;\n");
+        out.append("import java.io.File;\n\n");
         out.append("public class ").append(cls).append(" extends Stage {\n\n");
         out.append("    private final Stage stage = this;\n");
         for (FormComponent c : form.getComponents()) {
@@ -84,21 +105,24 @@ public final class JavaCodeGenerator {
         }
         out.append("\n");
         out.append("    public ").append(cls).append("() {\n");
-        out.append("        Pane root = new Pane();\n");
+        out.append("        AnchorPane root = new AnchorPane();\n");
         out.append("        root.setPrefSize(").append(fmt(form.getWidth()))
            .append(", ").append(fmt(form.getHeight())).append(");\n\n");
 
         for (FormComponent c : form.getComponents()) {
             String var = c.getId();
+            if (c.getType() == ComponentType.TIMER) {
+                appendTimer(out, c);
+                continue;
+            }
             out.append("        ").append(var).append(" = new ").append(javaTypeFor(c)).append("();\n");
             if (hasText(c)) {
                 out.append("        ").append(var).append(".setText(\"")
                    .append(escape(c.getText())).append("\");\n");
             }
             appendTypeSpecific(out, form, c, cls);
-            out.append("        ").append(var).append(".setLayoutX(").append(fmt(c.getX())).append(");\n");
-            out.append("        ").append(var).append(".setLayoutY(").append(fmt(c.getY())).append(");\n");
-            if (c.getType() == ComponentType.IMAGE_VIEW) {
+            appendPosition(out, form, c);
+            if (c.getType() == ComponentType.IMAGE_VIEW || c.getType() == ComponentType.MEDIA_PLAYER) {
                 out.append("        ").append(var).append(".setFitWidth(").append(fmt(c.getWidth())).append(");\n");
                 out.append("        ").append(var).append(".setFitHeight(").append(fmt(c.getHeight())).append(");\n");
             } else {
@@ -133,13 +157,13 @@ public final class JavaCodeGenerator {
         }
 
         appendFormEvents(out, form);
+        out.append("        setResizable(").append(form.isResizable()).append(");\n");
         if (project.hasWindowIcon()) {
             out.append("        getIcons().add(new Image(").append(cls)
                .append(".class.getResourceAsStream(\"/").append(ICON_RESOURCE).append("\")));\n");
         }
         out.append("        setTitle(\"").append(escape(form.getTitle())).append("\");\n");
         out.append("        setScene(new Scene(root));\n");
-        out.append("        setResizable(false);\n");
         out.append("    }\n");
         out.append("}\n");
         return out.toString();
@@ -174,8 +198,88 @@ public final class JavaCodeGenerator {
             }
             case PROGRESS_BAR -> out.append("        ").append(var).append(".setProgress(")
                     .append(c.getValue() / 100.0).append(");\n");
+            case TABLE_VIEW -> {
+                var columns = Renderer.lines(c.getColumns());
+                for (int i = 0; i < columns.size(); i++) {
+                    String colVar = var + "Col" + i;
+                    final int idx = i;
+                    out.append("        TableColumn<ObservableList<String>, String> ").append(colVar)
+                       .append(" = new TableColumn<>(\"").append(escape(columns.get(i))).append("\");\n");
+                    out.append("        ").append(colVar)
+                       .append(".setCellValueFactory(d -> new ReadOnlyStringWrapper(d.getValue().size() > ")
+                       .append(idx).append(" ? d.getValue().get(").append(idx).append(") : \"\"));\n");
+                    out.append("        ").append(var).append(".getColumns().add(").append(colVar).append(");\n");
+                }
+            }
+            case WEB_VIEW -> {
+                if (!c.getText().isEmpty()) {
+                    out.append("        ").append(var).append(".getEngine().load(\"")
+                       .append(escape(c.getText())).append("\");\n");
+                }
+            }
+            case MEDIA_PLAYER -> {
+                if (!c.getMediaData().isEmpty()) {
+                    out.append("        MediaPlayer ").append(var).append("Player = new MediaPlayer(new Media(\n")
+                       .append("                new File(UI.resourceToTempFile(\"/")
+                       .append(mediaResource(form, c)).append("\")).toURI().toString()));\n");
+                    out.append("        ").append(var).append(".setMediaPlayer(").append(var).append("Player);\n");
+                    if (!c.isDisabled()) {
+                        out.append("        ").append(var).append("Player.setAutoPlay(true);\n");
+                    }
+                }
+            }
             default -> { }
         }
+    }
+
+    /** The jar resource name for a Media component's bytes. */
+    public static String mediaResource(FormModel form, FormComponent c) {
+        return className(form) + "_" + c.getId() + ".media";
+    }
+
+    /** Emits either AnchorPane anchors or plain layoutX/Y, per the component's anchor flags. */
+    private static void appendPosition(StringBuilder out, FormModel form, FormComponent c) {
+        String var = c.getId();
+        if (c.isAnchorLeft()) {
+            out.append("        AnchorPane.setLeftAnchor(").append(var).append(", ")
+               .append(c.getX()).append(");\n");
+        } else if (!c.isAnchorRight()) {
+            out.append("        ").append(var).append(".setLayoutX(").append(fmt(c.getX())).append(");\n");
+        }
+        if (c.isAnchorRight()) {
+            out.append("        AnchorPane.setRightAnchor(").append(var).append(", ")
+               .append(form.getWidth() - c.getX() - c.getWidth()).append(");\n");
+        }
+        if (c.isAnchorTop()) {
+            out.append("        AnchorPane.setTopAnchor(").append(var).append(", ")
+               .append(c.getY()).append(");\n");
+        } else if (!c.isAnchorBottom()) {
+            out.append("        ").append(var).append(".setLayoutY(").append(fmt(c.getY())).append(");\n");
+        }
+        if (c.isAnchorBottom()) {
+            out.append("        AnchorPane.setBottomAnchor(").append(var).append(", ")
+               .append(form.getHeight() - c.getY() - c.getHeight()).append(");\n");
+        }
+    }
+
+    /** Timers become Timelines: no node, tick code embedded in the KeyFrame. */
+    private static void appendTimer(StringBuilder out, FormComponent c) {
+        String var = c.getId();
+        double interval = c.getValue() <= 0 ? 1000 : c.getValue();
+        out.append("        ").append(var).append(" = new Timeline(new KeyFrame(Duration.millis(")
+           .append(fmt(interval)).append("), event -> {\n");
+        String code = c.getEvents().get("onTick");
+        if (code != null && !code.isBlank()) {
+            for (String line : code.split("\n", -1)) {
+                out.append("            ").append(line.stripTrailing()).append("\n");
+            }
+        }
+        out.append("        }));\n");
+        out.append("        ").append(var).append(".setCycleCount(Animation.INDEFINITE);\n");
+        if (!c.isDisabled()) {
+            out.append("        ").append(var).append(".play();\n");
+        }
+        out.append("\n");
     }
 
     private static void appendFormEvents(StringBuilder out, FormModel form) {
@@ -205,6 +309,9 @@ public final class JavaCodeGenerator {
                         .append(".valueProperty().addListener((obs, oldValue, newValue) -> {\n");
                 case SELECTION_LISTENER -> out.append("        ").append(var)
                         .append(".getSelectionModel().selectedItemProperty().addListener((obs, oldValue, newValue) -> {\n");
+                case TIMER_TICK -> {
+                    continue; // embedded by appendTimer, never reaches here
+                }
             }
             for (String line : code.split("\n", -1)) {
                 out.append("            ").append(line.stripTrailing()).append("\n");
@@ -228,13 +335,18 @@ public final class JavaCodeGenerator {
             case PROGRESS_BAR -> "ProgressBar";
             case HYPERLINK -> "Hyperlink";
             case IMAGE_VIEW -> "ImageView";
+            case TIMER -> "Timeline";
+            case TABLE_VIEW -> "TableView<ObservableList<String>>";
+            case WEB_VIEW -> "WebView";
+            case MEDIA_PLAYER -> "MediaView";
         };
     }
 
     private static boolean hasText(FormComponent c) {
         return switch (c.getType()) {
             case BUTTON, LABEL, TEXT_FIELD, TEXT_AREA, CHECK_BOX, RADIO_BUTTON, HYPERLINK -> true;
-            case SLIDER, PANEL, COMBO_BOX, LIST_VIEW, PROGRESS_BAR, IMAGE_VIEW -> false;
+            case SLIDER, PANEL, COMBO_BOX, LIST_VIEW, PROGRESS_BAR, IMAGE_VIEW, TIMER,
+                 TABLE_VIEW, WEB_VIEW, MEDIA_PLAYER -> false;
         };
     }
 

@@ -12,6 +12,7 @@ public class FormModel {
     private String title = "My App";
     private double width = 640;
     private double height = 480;
+    private boolean resizable = false;
     // not final: Gson assigns it reflectively on load, which the JDK blocks for final fields
     private List<FormComponent> components = new ArrayList<>();
     private Map<String, String> events = new LinkedHashMap<>();
@@ -25,6 +26,9 @@ public class FormModel {
         c.setWidth(type.defaultWidth);
         c.setHeight(type.defaultHeight);
         c.setText(type.defaultText);
+        if (type == ComponentType.TIMER) {
+            c.setValue(1000); // interval in ms
+        }
         components.add(c);
         return c;
     }
@@ -64,6 +68,13 @@ public class FormModel {
         c.setTooltip(src.getTooltip());
         c.setDisabled(src.isDisabled());
         c.setAlignment(src.getAlignment());
+        c.setColumns(src.getColumns());
+        c.setMediaData(src.getMediaData());
+        c.setMediaFormat(src.getMediaFormat());
+        c.setAnchorLeft(src.isAnchorLeft());
+        c.setAnchorTop(src.isAnchorTop());
+        c.setAnchorRight(src.isAnchorRight());
+        c.setAnchorBottom(src.isAnchorBottom());
         c.getEvents().putAll(src.getEvents());
         return c;
     }
@@ -91,6 +102,9 @@ public class FormModel {
 
     public double getHeight() { return height; }
     public void setHeight(double height) { this.height = height; }
+
+    public boolean isResizable() { return resizable; }
+    public void setResizable(boolean resizable) { this.resizable = resizable; }
 
     public List<FormComponent> getComponents() { return components; }
 

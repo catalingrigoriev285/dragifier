@@ -48,6 +48,10 @@ public class InspectorPane extends VBox {
     private final ColorPicker bgPicker = new ColorPicker(Color.WHITE);
     private final TextArea itemsArea = new TextArea();
     private Label itemsLabel;
+    private final TextArea columnsArea = new TextArea();
+    private Label columnsLabel;
+    private final javafx.scene.layout.HBox mediaButtons = new javafx.scene.layout.HBox(6);
+    private Label mediaLabel;
     private final TextField valueField = new TextField();
     private Label valueLabel;
     private final javafx.scene.layout.HBox imageButtons = new javafx.scene.layout.HBox(6);
@@ -57,7 +61,13 @@ public class InspectorPane extends VBox {
     private final javafx.scene.control.ComboBox<String> alignBox = new javafx.scene.control.ComboBox<>();
     private Label alignLabel;
 
+    private final CheckBox anchorL = new CheckBox("L");
+    private final CheckBox anchorT = new CheckBox("T");
+    private final CheckBox anchorR = new CheckBox("R");
+    private final CheckBox anchorB = new CheckBox("B");
+
     private final GridPane formGrid = new GridPane();
+    private final CheckBox resizableBox = new CheckBox("Resizable window");
     private final javafx.scene.control.TitledPane formSection = new javafx.scene.control.TitledPane("Form", formGrid);
     private final TextField nameField = new TextField();
     private final TextField titleField = new TextField();
@@ -78,7 +88,9 @@ public class InspectorPane extends VBox {
         addRow(layoutGrid, row++, "X", xField);
         addRow(layoutGrid, row++, "Y", yField);
         addRow(layoutGrid, row++, "Width", wField);
-        addRow(layoutGrid, row, "Height", hField);
+        addRow(layoutGrid, row++, "Height", hField);
+        javafx.scene.layout.HBox anchors = new javafx.scene.layout.HBox(8, anchorL, anchorT, anchorR, anchorB);
+        addRow(layoutGrid, row, "Anchors", anchors);
 
         setupGrid(appearanceGrid);
         row = 0;
@@ -98,19 +110,33 @@ public class InspectorPane extends VBox {
         itemsArea.setPrefWidth(110);
         itemsArea.setPromptText("One item per line");
         itemsLabel = addRow(behaviorGrid, row++, "Items", itemsArea);
+        columnsArea.setPrefRowCount(3);
+        columnsArea.setPrefWidth(110);
+        columnsArea.setPromptText("One column per line");
+        columnsLabel = addRow(behaviorGrid, row++, "Columns", columnsArea);
         valueLabel = addRow(behaviorGrid, row++, "Value %", valueField);
         javafx.scene.control.Button chooseImage = new javafx.scene.control.Button("Choose…");
         javafx.scene.control.Button clearImage = new javafx.scene.control.Button("Clear");
         chooseImage.setOnAction(e -> pickImage());
         clearImage.setOnAction(e -> applyComponent(() -> current.setImageData("")));
         imageButtons.getChildren().addAll(chooseImage, clearImage);
-        imageLabel = addRow(behaviorGrid, row, "Image", imageButtons);
+        imageLabel = addRow(behaviorGrid, row++, "Image", imageButtons);
+        javafx.scene.control.Button chooseMedia = new javafx.scene.control.Button("Choose…");
+        javafx.scene.control.Button clearMedia = new javafx.scene.control.Button("Clear");
+        chooseMedia.setOnAction(e -> pickMedia());
+        clearMedia.setOnAction(e -> applyComponent(() -> {
+            current.setMediaData("");
+            current.setMediaFormat("");
+        }));
+        mediaButtons.getChildren().addAll(chooseMedia, clearMedia);
+        mediaLabel = addRow(behaviorGrid, row, "Media", mediaButtons);
 
         setupGrid(formGrid);
         addRow(formGrid, 0, "Name", nameField);
         addRow(formGrid, 1, "Title", titleField);
         addRow(formGrid, 2, "Width", formWField);
         addRow(formGrid, 3, "Height", formHField);
+        formGrid.add(resizableBox, 0, 4, 2, 1);
 
         for (var section : java.util.List.of(layoutSection, appearanceSection, behaviorSection, formSection)) {
             section.setAnimated(false);
@@ -188,6 +214,10 @@ public class InspectorPane extends VBox {
         yField.setText(num(c.getY()));
         wField.setText(num(c.getWidth()));
         hField.setText(num(c.getHeight()));
+        anchorL.setSelected(c.isAnchorLeft());
+        anchorT.setSelected(c.isAnchorTop());
+        anchorR.setSelected(c.isAnchorRight());
+        anchorB.setSelected(c.isAnchorBottom());
         textField.setText(c.getText());
         fontField.setText(num(c.getFontSize()));
         textColorPicker.setValue(parseColor(c.getTextColor(), Color.web("#212121")));
@@ -198,7 +228,11 @@ public class InspectorPane extends VBox {
         boolean hasItems = c.getType() == ComponentType.COMBO_BOX || c.getType() == ComponentType.LIST_VIEW;
         setRowVisible(itemsLabel, itemsArea, hasItems);
         itemsArea.setText(c.getItems());
-        boolean hasValue = c.getType() == ComponentType.PROGRESS_BAR;
+        setRowVisible(columnsLabel, columnsArea, c.getType() == ComponentType.TABLE_VIEW);
+        columnsArea.setText(c.getColumns());
+        setRowVisible(mediaLabel, mediaButtons, c.getType() == ComponentType.MEDIA_PLAYER);
+        boolean hasValue = c.getType() == ComponentType.PROGRESS_BAR || c.getType() == ComponentType.TIMER;
+        valueLabel.setText(c.getType() == ComponentType.TIMER ? "Interval ms" : "Value %");
         setRowVisible(valueLabel, valueField, hasValue);
         valueField.setText(num(c.getValue()));
         setRowVisible(imageLabel, imageButtons, c.getType() == ComponentType.IMAGE_VIEW);
@@ -232,6 +266,7 @@ public class InspectorPane extends VBox {
             titleField.setText(model.getTitle());
             formWField.setText(num(model.getWidth()));
             formHField.setText(num(model.getHeight()));
+            resizableBox.setSelected(model.isResizable());
         }
         showSections(false, true);
         updating = false;
@@ -266,8 +301,15 @@ public class InspectorPane extends VBox {
                 applyComponent(() -> current.setItems(itemsArea.getText()));
             }
         });
+        columnsArea.focusedProperty().addListener((obs, was, is) -> {
+            if (!is && current != null && !columnsArea.getText().equals(current.getColumns())) {
+                applyComponent(() -> current.setColumns(columnsArea.getText()));
+            }
+        });
         onCommit(valueField, () -> applyNumber(valueField, FormComponent::getValue,
-                (c, v) -> c.setValue(Math.max(0, Math.min(100, v)))));
+                (c, v) -> c.setValue(c.getType() == ComponentType.TIMER
+                        ? Math.max(16, v)
+                        : Math.max(0, Math.min(100, v)))));
         onCommit(tooltipField, () -> {
             if (current != null && !tooltipField.getText().equals(current.getTooltip())) {
                 applyComponent(() -> current.setTooltip(tooltipField.getText()));
@@ -275,6 +317,10 @@ public class InspectorPane extends VBox {
         });
         disabledBox.setOnAction(e ->
                 applyComponent(() -> current.setDisabled(disabledBox.isSelected())));
+        anchorL.setOnAction(e -> applyComponent(() -> current.setAnchorLeft(anchorL.isSelected())));
+        anchorT.setOnAction(e -> applyComponent(() -> current.setAnchorTop(anchorT.isSelected())));
+        anchorR.setOnAction(e -> applyComponent(() -> current.setAnchorRight(anchorR.isSelected())));
+        anchorB.setOnAction(e -> applyComponent(() -> current.setAnchorBottom(anchorB.isSelected())));
         alignBox.setOnAction(e -> {
             String picked = alignBox.getValue();
             if (picked == null) {
@@ -344,6 +390,8 @@ public class InspectorPane extends VBox {
                 applyForm(() -> model.setHeight(Math.max(100, v)));
             }
         });
+        resizableBox.setOnAction(e ->
+                applyForm(() -> model.setResizable(resizableBox.isSelected())));
     }
 
     private void applyNumber(TextField field,
@@ -379,6 +427,39 @@ public class InspectorPane extends VBox {
             javafx.scene.control.Alert alert = new javafx.scene.control.Alert(
                     javafx.scene.control.Alert.AlertType.ERROR, "Could not read image: " + ex.getMessage());
             alert.showAndWait();
+        }
+    }
+
+    private void pickMedia() {
+        if (current == null) {
+            return;
+        }
+        javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+        chooser.setTitle("Choose Media File");
+        chooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter(
+                "Media (*.mp3, *.mp4, *.wav, *.m4a, *.aiff)", "*.mp3", "*.mp4", "*.wav", "*.m4a", "*.aiff"));
+        java.io.File file = chooser.showOpenDialog(getScene().getWindow());
+        if (file == null) {
+            return;
+        }
+        try {
+            if (file.length() > 10L * 1024 * 1024) {
+                new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.ERROR,
+                        "Media files are limited to 10 MB (they are stored inside the project file).")
+                        .showAndWait();
+                return;
+            }
+            byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
+            String encoded = java.util.Base64.getEncoder().encodeToString(bytes);
+            String name = file.getName().toLowerCase();
+            String format = name.contains(".") ? name.substring(name.lastIndexOf('.') + 1) : "";
+            applyComponent(() -> {
+                current.setMediaData(encoded);
+                current.setMediaFormat(format);
+            });
+        } catch (java.io.IOException ex) {
+            new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.ERROR,
+                    "Could not read media file: " + ex.getMessage()).showAndWait();
         }
     }
 

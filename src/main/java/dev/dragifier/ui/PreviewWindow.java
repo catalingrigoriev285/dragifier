@@ -19,6 +19,9 @@ public final class PreviewWindow {
         root.setPrefSize(model.getWidth(), model.getHeight());
         root.setStyle("-fx-background-color: white;");
         for (FormComponent c : model.getComponents()) {
+            if (c.getType() == dev.dragifier.model.ComponentType.TIMER) {
+                continue; // design-time only; quick preview does not run timers
+            }
             Region node = Renderer.createNode(c);
             node.setLayoutX(c.getX());
             node.setLayoutY(c.getY());

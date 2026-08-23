@@ -14,7 +14,11 @@ public enum ComponentType {
     RADIO_BUTTON("RadioButton", "radioButton", 110, 24, "RadioButton"),
     PROGRESS_BAR("ProgressBar", "progressBar", 160, 20, ""),
     HYPERLINK("Hyperlink", "hyperlink", 100, 24, "Hyperlink"),
-    IMAGE_VIEW("Image", "image", 120, 90, "");
+    IMAGE_VIEW("Image", "image", 120, 90, ""),
+    TIMER("Timer", "timer", 48, 48, ""),
+    TABLE_VIEW("Table", "table", 260, 160, ""),
+    WEB_VIEW("WebView", "webView", 280, 180, "https://example.com"),
+    MEDIA_PLAYER("Media", "media", 240, 160, "");
 
     public final String displayName;
     public final String idPrefix;

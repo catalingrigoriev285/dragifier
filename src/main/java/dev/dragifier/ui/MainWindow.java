@@ -116,6 +116,8 @@ public class MainWindow {
         inspector.setCheckpoint(() -> undoManager.checkpoint(null));
         eventEditor.setCheckpoint(undoManager::checkpoint);
         eventEditor.setOnEdited(this::markDirty);
+        eventEditor.setFormNames(() -> project.getForms().stream().map(FormModel::getName).toList());
+        eventEditor.setContextForm(() -> model);
         tree.setOnPick(canvas::select);
         canvas.setOnGeometryChanged(c -> {
             inspector.updateGeometry(c);

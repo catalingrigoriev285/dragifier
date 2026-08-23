@@ -25,6 +25,16 @@ public class FormComponent {
     private boolean disabled = false;
     /** Text alignment: "LEFT", "CENTER", "RIGHT", or "" for the type's default. */
     private String alignment = "";
+    /** Edge anchoring for resizable forms; left+top are the classic defaults. */
+    private boolean anchorLeft = true;
+    private boolean anchorTop = true;
+    private boolean anchorRight = false;
+    private boolean anchorBottom = false;
+    /** Newline-separated column names, for Table components. */
+    private String columns = "";
+    /** Base64 media bytes + original extension, for Media components. */
+    private String mediaData = "";
+    private String mediaFormat = "";
     private Map<String, String> events = new LinkedHashMap<>();
 
     public String getId() { return id; }
@@ -74,6 +84,27 @@ public class FormComponent {
 
     public String getAlignment() { return alignment == null ? "" : alignment; }
     public void setAlignment(String alignment) { this.alignment = alignment; }
+
+    public boolean isAnchorLeft() { return anchorLeft; }
+    public void setAnchorLeft(boolean anchorLeft) { this.anchorLeft = anchorLeft; }
+
+    public boolean isAnchorTop() { return anchorTop; }
+    public void setAnchorTop(boolean anchorTop) { this.anchorTop = anchorTop; }
+
+    public boolean isAnchorRight() { return anchorRight; }
+    public void setAnchorRight(boolean anchorRight) { this.anchorRight = anchorRight; }
+
+    public boolean isAnchorBottom() { return anchorBottom; }
+    public void setAnchorBottom(boolean anchorBottom) { this.anchorBottom = anchorBottom; }
+
+    public String getColumns() { return columns == null ? "" : columns; }
+    public void setColumns(String columns) { this.columns = columns; }
+
+    public String getMediaData() { return mediaData == null ? "" : mediaData; }
+    public void setMediaData(String mediaData) { this.mediaData = mediaData; }
+
+    public String getMediaFormat() { return mediaFormat == null ? "" : mediaFormat; }
+    public void setMediaFormat(String mediaFormat) { this.mediaFormat = mediaFormat; }
 
     /** Event key → Java handler body. Missing/blank entries mean "no handler". */
     public Map<String, String> getEvents() {

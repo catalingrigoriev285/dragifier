@@ -67,7 +67,7 @@ public final class AppRunner {
 
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         if (compiler == null) {
-            return new CompileResult(dir, JavaCodeGenerator.MAIN_CLASS,
+            return new CompileResult(dir, JavaCodeGenerator.LAUNCHER_CLASS,
                     "No Java compiler available — the IDE must run on a JDK (not a JRE).");
         }
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
@@ -76,7 +76,7 @@ public final class AppRunner {
             List<String> options = new ArrayList<>(List.of("-d", dir.toString()));
             String modulePath = modulePath();
             if (modulePath != null) {
-                options.addAll(List.of("--module-path", modulePath, "--add-modules", "javafx.controls"));
+                options.addAll(List.of("--module-path", modulePath, "--add-modules", "javafx.controls,javafx.web,javafx.media"));
             }
             ok = compiler.getTask(null, fm, diagnostics, options, null,
                     fm.getJavaFileObjectsFromPaths(sourceFiles)).call();
@@ -86,11 +86,11 @@ public final class AppRunner {
                     .filter(d -> d.getKind() == Diagnostic.Kind.ERROR)
                     .map(d -> d.getSource().getName() + " line " + d.getLineNumber() + ": " + d.getMessage(null))
                     .collect(Collectors.joining("\n"));
-            return new CompileResult(dir, JavaCodeGenerator.MAIN_CLASS,
+            return new CompileResult(dir, JavaCodeGenerator.LAUNCHER_CLASS,
                     details.isEmpty() ? "Unknown compile error" : details);
         }
         writeImageResources(project, dir);
-        return new CompileResult(dir, JavaCodeGenerator.MAIN_CLASS, null);
+        return new CompileResult(dir, JavaCodeGenerator.LAUNCHER_CLASS, null);
     }
 
     /** Writes each Image component's bytes next to the classes so getResourceAsStream finds them. */
@@ -104,6 +104,10 @@ public final class AppRunner {
                 if (!c.getImageData().isEmpty()) {
                     Files.write(dir.resolve(JavaCodeGenerator.imageResource(form, c)),
                             java.util.Base64.getDecoder().decode(c.getImageData()));
+                }
+                if (!c.getMediaData().isEmpty()) {
+                    Files.write(dir.resolve(JavaCodeGenerator.mediaResource(form, c)),
+                            java.util.Base64.getDecoder().decode(c.getMediaData()));
                 }
             }
         }
@@ -125,12 +129,18 @@ public final class AppRunner {
             status.accept("Running " + cls + "…");
             List<String> cmd = new ArrayList<>();
             cmd.add(Path.of(System.getProperty("java.home"), "bin", "java").toString());
-            cmd.add("--enable-native-access=javafx.graphics");
             String modulePath = modulePath();
-            if (modulePath != null) {
-                cmd.addAll(List.of("--module-path", modulePath, "--add-modules", "javafx.controls"));
+            if (usesWeb(project) && modulePath != null) {
+                // classpath mode: javafx.web can't resolve as a module on this JDK
+                cmd.add("--enable-native-access=ALL-UNNAMED");
+                cmd.addAll(List.of("-cp", modulePath + File.pathSeparator + dir, cls));
+            } else {
+                cmd.add("--enable-native-access=javafx.graphics");
+                if (modulePath != null) {
+                    cmd.addAll(List.of("--module-path", modulePath, "--add-modules", addModulesFor(project)));
+                }
+                cmd.addAll(List.of("-cp", dir.toString(), cls));
             }
-            cmd.addAll(List.of("-cp", dir.toString(), cls));
             Process process = new ProcessBuilder(cmd).redirectErrorStream(true).start();
             StringBuilder all = new StringBuilder();
             try (var reader = new java.io.BufferedReader(
@@ -157,15 +167,46 @@ public final class AppRunner {
         return modulePath();
     }
 
+    public static boolean usesWeb(ProjectModel project) {
+        return usesType(project, dev.dragifier.model.ComponentType.WEB_VIEW);
+    }
+
+    public static boolean usesMedia(ProjectModel project) {
+        return usesType(project, dev.dragifier.model.ComponentType.MEDIA_PLAYER);
+    }
+
+    private static boolean usesType(ProjectModel project, dev.dragifier.model.ComponentType type) {
+        return project.getForms().stream()
+                .flatMap(f -> f.getComponents().stream())
+                .anyMatch(c -> c.getType() == type);
+    }
+
+    /**
+     * JavaFX modules a project needs on the module path. WebView is excluded:
+     * javafx.web requires jdk.jsobject, which modern JDKs no longer ship, so
+     * WebView projects run with JavaFX on the classpath instead.
+     */
+    public static String addModulesFor(ProjectModel project) {
+        return "javafx.controls" + (usesMedia(project) ? ",javafx.media" : "");
+    }
+
     private static String modulePath() {
-        String mp = System.getProperty("jdk.module.path");
-        if (mp != null && !mp.isBlank()) {
-            return mp;
+        // merge the IDE's module path with any javafx jars left on its classpath
+        // (javafx-web/media ride along as plain dependencies), deduped by filename
+        var byName = new java.util.LinkedHashMap<String, String>();
+        for (String source : new String[]{
+                System.getProperty("jdk.module.path", ""),
+                System.getProperty("java.class.path", "")}) {
+            for (String entry : source.split(java.util.regex.Pattern.quote(File.pathSeparator))) {
+                if (entry.isBlank()) {
+                    continue;
+                }
+                Path file = Path.of(entry).getFileName();
+                if (file != null && file.toString().toLowerCase().startsWith("javafx-")) {
+                    byName.putIfAbsent(file.toString(), entry);
+                }
+            }
         }
-        String cp = System.getProperty("java.class.path", "");
-        String javafxJars = Arrays.stream(cp.split(File.pathSeparator))
-                .filter(entry -> entry.toLowerCase().contains("javafx"))
-                .collect(Collectors.joining(File.pathSeparator));
-        return javafxJars.isBlank() ? null : javafxJars;
+        return byName.isEmpty() ? null : String.join(File.pathSeparator, byName.values());
     }
 }

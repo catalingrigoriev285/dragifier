@@ -61,6 +61,36 @@ public final class CodegenSmoke {
         panel.setTooltip("A panel tooltip (Tooltip.install path)");
         form.getEvents().put("onShown", "label1.setText(\"Form shown\");");
 
+        FormComponent timer = form.create(ComponentType.TIMER, 300, 380);
+        timer.setValue(500);
+        timer.getEvents().put("onTick",
+                "label1.setText(String.valueOf(System.nanoTime()));");
+
+        FormComponent apiButton = form.create(ComponentType.BUTTON, 150, 420);
+        apiButton.setText("API demo");
+        apiButton.getEvents().put("onAction",
+                "if (UI.confirm(\"Continue?\")) {\n"
+                + "    String name = UI.prompt(\"Your name:\", \"\");\n"
+                + "    UI.alert(\"Hello, \" + name);\n"
+                + "    UI.copyToClipboard(name);\n"
+                + "}");
+
+        FormComponent table = form.create(ComponentType.TABLE_VIEW, 420, 24);
+        table.setColumns("Name\nAge");
+        table.getEvents().put("onSelect", "label1.setText(String.valueOf(newValue));");
+
+        FormComponent web = form.create(ComponentType.WEB_VIEW, 420, 200);
+        web.setText("https://example.com");
+
+        FormComponent media = form.create(ComponentType.MEDIA_PLAYER, 420, 400);
+        media.setMediaData("AAAA"); // fake payload, only the resource pipeline is checked
+        media.setMediaFormat("mp3");
+
+        form.setResizable(true);
+        FormComponent anchored = form.create(ComponentType.TEXT_AREA, 24, 460);
+        anchored.setAnchorRight(true);
+        anchored.setAnchorBottom(true);
+
         // second form, opened from the first with plain Java
         FormModel second = project.addForm();
         second.setTitle("Second Form");
@@ -95,6 +125,11 @@ public final class CodegenSmoke {
             System.exit(1);
         }
         System.out.println("SMOKE OK: window icon resource written.");
+        if (!java.nio.file.Files.exists(result.dir().resolve(JavaCodeGenerator.mediaResource(form, media)))) {
+            System.err.println("SMOKE FAILED: media resource was not written");
+            System.exit(1);
+        }
+        System.out.println("SMOKE OK: media resource written.");
 
         checkUndoRedo(project, label);
 
