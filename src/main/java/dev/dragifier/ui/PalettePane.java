@@ -23,10 +23,24 @@ public class PalettePane extends VBox {
         title.getStyleClass().add("panel-header");
         getChildren().add(title);
 
+        javafx.scene.control.TextField filter = new javafx.scene.control.TextField();
+        filter.setPromptText("Filter…");
+        getChildren().add(filter);
+
         VBox items = new VBox(4);
         for (ComponentType type : ComponentType.values()) {
-            items.getChildren().add(makeItem(type));
+            Label item = makeItem(type);
+            items.getChildren().add(item);
         }
+        filter.textProperty().addListener((obs, was, query) -> {
+            String q = query == null ? "" : query.trim().toLowerCase();
+            for (javafx.scene.Node node : items.getChildren()) {
+                boolean match = q.isEmpty()
+                        || ((Label) node).getText().toLowerCase().contains(q);
+                node.setVisible(match);
+                node.setManaged(match);
+            }
+        });
         ScrollPane scroll = new ScrollPane(items);
         scroll.setFitToWidth(true);
         scroll.setStyle("-fx-background-color: transparent;");

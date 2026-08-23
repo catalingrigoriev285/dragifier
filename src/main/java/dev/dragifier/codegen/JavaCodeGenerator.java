@@ -47,9 +47,14 @@ public final class JavaCodeGenerator {
 
     /** All sources for the project, filename → content. */
     public static Map<String, String> generateProject(ProjectModel project) {
+        return generateProject(project, new SourceMap());
+    }
+
+    /** As above, also recording where each user code line lands in {@code map}. */
+    public static Map<String, String> generateProject(ProjectModel project, SourceMap map) {
         Map<String, String> sources = new LinkedHashMap<>();
         for (FormModel form : project.getForms()) {
-            sources.put(className(form) + ".java", formSource(project, form));
+            sources.put(className(form) + ".java", formSource(project, form, map));
         }
         sources.put(MAIN_CLASS + ".java", mainSource(project));
         sources.put(LAUNCHER_CLASS + ".java",
@@ -76,7 +81,7 @@ public final class JavaCodeGenerator {
                 + "}\n";
     }
 
-    private static String formSource(ProjectModel project, FormModel form) {
+    private static String formSource(ProjectModel project, FormModel form, SourceMap map) {
         String cls = className(form);
         StringBuilder out = new StringBuilder();
         out.append("import javafx.animation.Animation;\n");
@@ -112,7 +117,7 @@ public final class JavaCodeGenerator {
         for (FormComponent c : form.getComponents()) {
             String var = c.getId();
             if (c.getType() == ComponentType.TIMER) {
-                appendTimer(out, c);
+                appendTimer(out, form, c, cls, map);
                 continue;
             }
             out.append("        ").append(var).append(" = new ").append(javaTypeFor(c)).append("();\n");
@@ -152,11 +157,11 @@ public final class JavaCodeGenerator {
                        .append(escape(c.getTooltip())).append("\"));\n");
                 }
             }
-            appendEvents(out, c);
+            appendEvents(out, form, c, cls, map);
             out.append("        root.getChildren().add(").append(var).append(");\n\n");
         }
 
-        appendFormEvents(out, form);
+        appendFormEvents(out, form, cls, map);
         out.append("        setResizable(").append(form.isResizable()).append(");\n");
         if (project.hasWindowIcon()) {
             out.append("        getIcons().add(new Image(").append(cls)
@@ -263,16 +268,15 @@ public final class JavaCodeGenerator {
     }
 
     /** Timers become Timelines: no node, tick code embedded in the KeyFrame. */
-    private static void appendTimer(StringBuilder out, FormComponent c) {
+    private static void appendTimer(StringBuilder out, FormModel form, FormComponent c,
+                                    String cls, SourceMap map) {
         String var = c.getId();
         double interval = c.getValue() <= 0 ? 1000 : c.getValue();
         out.append("        ").append(var).append(" = new Timeline(new KeyFrame(Duration.millis(")
            .append(fmt(interval)).append("), event -> {\n");
         String code = c.getEvents().get("onTick");
         if (code != null && !code.isBlank()) {
-            for (String line : code.split("\n", -1)) {
-                out.append("            ").append(line.stripTrailing()).append("\n");
-            }
+            appendUserCode(out, code, form, c.getId(), "onTick", cls, map);
         }
         out.append("        }));\n");
         out.append("        ").append(var).append(".setCycleCount(Animation.INDEFINITE);\n");
@@ -282,21 +286,38 @@ public final class JavaCodeGenerator {
         out.append("\n");
     }
 
-    private static void appendFormEvents(StringBuilder out, FormModel form) {
+    private static void appendFormEvents(StringBuilder out, FormModel form, String cls, SourceMap map) {
         for (EventSpec spec : EventSpec.forForm()) {
             String code = form.getEvents().get(spec.key());
             if (code == null || code.isBlank()) {
                 continue;
             }
             out.append("        ").append(spec.setter()).append("(event -> {\n");
-            for (String line : code.split("\n", -1)) {
-                out.append("            ").append(line.stripTrailing()).append("\n");
-            }
+            appendUserCode(out, code, form, null, spec.key(), cls, map);
             out.append("        });\n");
         }
     }
 
-    private static void appendEvents(StringBuilder out, FormComponent c) {
+    /** Appends the user's code lines, recording each one's landing spot in the map. */
+    private static void appendUserCode(StringBuilder out, String code, FormModel form,
+                                       String componentId, String eventKey, String cls, SourceMap map) {
+        int generatedLine = 1;
+        for (int i = 0; i < out.length(); i++) {
+            if (out.charAt(i) == '\n') {
+                generatedLine++;
+            }
+        }
+        int userLine = 0;
+        for (String line : code.split("\n", -1)) {
+            map.add(new SourceMap.Entry(cls, generatedLine, form.getName(), componentId, eventKey, userLine));
+            out.append("            ").append(line.stripTrailing()).append("\n");
+            generatedLine++;
+            userLine++;
+        }
+    }
+
+    private static void appendEvents(StringBuilder out, FormModel form, FormComponent c,
+                                     String cls, SourceMap map) {
         for (EventSpec spec : EventSpec.forType(c.getType())) {
             String code = c.getEvents().get(spec.key());
             if (code == null || code.isBlank()) {
@@ -313,9 +334,7 @@ public final class JavaCodeGenerator {
                     continue; // embedded by appendTimer, never reaches here
                 }
             }
-            for (String line : code.split("\n", -1)) {
-                out.append("            ").append(line.stripTrailing()).append("\n");
-            }
+            appendUserCode(out, code, form, c.getId(), spec.key(), cls, map);
             out.append("        });\n");
         }
     }

@@ -5,6 +5,7 @@ import atlantafx.base.theme.PrimerLight;
 import dev.dragifier.codegen.JavaCodeGenerator;
 import dev.dragifier.io.ProjectIO;
 import dev.dragifier.io.RecentProjects;
+import dev.dragifier.model.FormComponent;
 import dev.dragifier.model.FormModel;
 import dev.dragifier.model.ProjectModel;
 import dev.dragifier.model.Templates;
@@ -89,8 +90,7 @@ public class MainWindow {
 
     private final BorderPane root = new BorderPane();
     private WelcomePane welcomePane;
-    private Node designerCenter;
-    private Node leftPanel;
+    private SplitPane designerSplit;
 
     public MainWindow(Stage stage) {
         this.stage = stage;
@@ -119,6 +119,7 @@ public class MainWindow {
         eventEditor.setFormNames(() -> project.getForms().stream().map(FormModel::getName).toList());
         eventEditor.setContextForm(() -> model);
         tree.setOnPick(canvas::select);
+        tree.setOnReorder(this::applyReorder);
         canvas.setOnGeometryChanged(c -> {
             inspector.updateGeometry(c);
             markDirty();
@@ -129,6 +130,22 @@ public class MainWindow {
             markDirty();
         });
         inspector.setNameInUse(name -> project.nameInUse(name, model));
+        inspector.setRenamer((c, newId) -> {
+            if (!model.canRename(c, newId)) {
+                status.setText("Invalid or duplicate id: " + newId);
+                return false;
+            }
+            undoManager.checkpoint(null);
+            model.renameComponent(c, newId);
+            tree.refresh();
+            tree.select(c);
+            eventEditor.showComponent(c);
+            markDirty();
+            status.setText("Renamed to " + newId);
+            return true;
+        });
+        canvas.setOnRenameRequest(inspector::focusIdField);
+        canvas.setOnZOrderRequest(this::zOrder);
         inspector.setOnFormEdited(() -> {
             canvas.applyFormSize();
             updateRulers();
@@ -145,11 +162,16 @@ public class MainWindow {
                 template -> loadTemplate(template),
                 this::openPath);
 
-        designerCenter = buildDesignerCenter();
-        leftPanel = buildLeftPanel();
+        Node leftPanel = buildLeftPanel();
+        Node designerCenter = buildDesignerCenter();
+        designerSplit = new SplitPane(leftPanel, designerCenter, inspector);
+        designerSplit.setOrientation(Orientation.HORIZONTAL);
+        SplitPane.setResizableWithParent(leftPanel, false);
+        SplitPane.setResizableWithParent(inspector, false);
+        designerSplit.setDividerPositions(0.15, 0.82);
+        inspector.setMinWidth(180);
 
         root.setTop(new VBox(buildMenuBar(), buildToolBar()));
-        root.setRight(inspector);
         buildStatusBar();
 
         Scene scene = new Scene(root, 1200, 780);
@@ -217,8 +239,8 @@ public class MainWindow {
         SplitPane left = new SplitPane(new PalettePane(), tree);
         left.setOrientation(Orientation.VERTICAL);
         left.setDividerPositions(0.6);
-        left.setPrefWidth(180);
-        left.setMaxWidth(230);
+        left.setPrefWidth(190);
+        left.setMinWidth(140);
         return left;
     }
 
@@ -235,19 +257,11 @@ public class MainWindow {
 
     private void showWelcome() {
         welcomePane.refreshRecents();
-        root.setLeft(null);
-        root.setRight(null);
         root.setCenter(welcomePane);
     }
 
     private void showDesigner() {
-        root.setLeft(leftPanel);
-        root.setRight(inspector);
-        root.setCenter(designerCenter);
-    }
-
-    private boolean designerShown() {
-        return root.getCenter() == designerCenter;
+        root.setCenter(designerSplit);
     }
 
     // ------------------------------------------------------------- menus/bar
@@ -298,7 +312,8 @@ public class MainWindow {
                 item("Same Size", null, () -> canvas.align(DesignCanvas.AlignOp.SAME_SIZE)),
                 new SeparatorMenuItem(),
                 item("Bring to Front", "Shortcut+Shift+F", () -> zOrder(true)),
-                item("Send to Back", "Shortcut+Shift+B", () -> zOrder(false)));
+                item("Send to Back", "Shortcut+Shift+B", () -> zOrder(false)),
+                item("Order…", null, this::showOrderDialog));
 
         Menu project = new Menu("Project");
         project.getItems().addAll(
@@ -502,6 +517,36 @@ public class MainWindow {
 
     // -------------------------------------------------------------- z-order
 
+    private void showOrderDialog() {
+        OrderDialog.show(stage, model.getComponents()).ifPresent(order -> {
+            undoManager.checkpoint(null);
+            model.getComponents().clear();
+            model.getComponents().addAll(order);
+            canvas.rebuildPreservingSelection();
+            tree.refresh();
+            tree.select(canvas.getSelected());
+            markDirty();
+        });
+    }
+
+    private void applyReorder(int from, int to) {
+        var components = model.getComponents();
+        if (from < 0 || from >= components.size()) {
+            return;
+        }
+        int target = Math.max(0, Math.min(components.size() - 1, to));
+        if (target == from) {
+            return;
+        }
+        undoManager.checkpoint(null);
+        var moved = components.remove(from);
+        components.add(target, moved);
+        canvas.rebuildPreservingSelection();
+        tree.refresh();
+        tree.select(moved);
+        markDirty();
+    }
+
     private void zOrder(boolean front) {
         var selected = canvas.getSelectionList();
         if (selected.isEmpty()) {
@@ -629,7 +674,41 @@ public class MainWindow {
                     console.append("[dragifier] " + s);
                 },
                 this::errorText,
-                console::append);
+                console::append,
+                this::showProblems);
+    }
+
+    private void showProblems(AppRunner.CompileResult result) {
+        for (AppRunner.CompileError err : result.errors()) {
+            console.append("[error] " + err.file() + ":" + err.line() + " " + err.message());
+        }
+        ProblemsDialog.show(stage, result.errors(), err -> {
+            var entry = result.map().resolve(err.file(), err.line());
+            if (entry == null) {
+                errorText("Compilation failed", result.errorDetails());
+                return;
+            }
+            navigateToError(entry, err);
+        });
+    }
+
+    private void navigateToError(dev.dragifier.codegen.SourceMap.Entry entry, AppRunner.CompileError err) {
+        FormModel form = project.findForm(entry.formName());
+        if (form != null && form != model) {
+            model = form;
+            bindProject();
+        }
+        FormComponent target = entry.componentId() == null ? null
+                : model.getComponents().stream()
+                        .filter(c -> c.getId().equals(entry.componentId()))
+                        .findFirst().orElse(null);
+        canvas.select(target);
+        eventEditor.selectEvent(entry.eventKey());
+        bottomTabs.getSelectionModel().select(0);
+        long delta = Math.max(0, err.line() - entry.generatedLine());
+        eventEditor.focusLine(entry.userLine() + (int) delta);
+        status.setText("Error in " + (entry.componentId() == null ? "form" : entry.componentId())
+                + " → " + entry.eventKey());
     }
 
     private void preview() {

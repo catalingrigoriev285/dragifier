@@ -30,8 +30,12 @@ public class InspectorPane extends VBox {
     private Runnable checkpoint = () -> {};
 
     private final Label header = new Label();
+    private final TextField searchField = new TextField();
+    private final java.util.List<javafx.scene.Node[]> searchRows = new java.util.ArrayList<>();
 
     private final GridPane layoutGrid = new GridPane();
+    private final TextField idField = new TextField();
+    private java.util.function.BiPredicate<FormComponent, String> renamer = (c, id) -> false;
     private final GridPane appearanceGrid = new GridPane();
     private final GridPane behaviorGrid = new GridPane();
     private final javafx.scene.control.TitledPane layoutSection = new javafx.scene.control.TitledPane("Layout", layoutGrid);
@@ -58,6 +62,7 @@ public class InspectorPane extends VBox {
     private Label imageLabel;
     private final TextField tooltipField = new TextField();
     private final CheckBox disabledBox = new CheckBox("Disabled");
+    private final CheckBox lockedBox = new CheckBox("Locked");
     private final javafx.scene.control.ComboBox<String> alignBox = new javafx.scene.control.ComboBox<>();
     private Label alignLabel;
 
@@ -85,6 +90,7 @@ public class InspectorPane extends VBox {
 
         setupGrid(layoutGrid);
         int row = 0;
+        addRow(layoutGrid, row++, "Id", idField);
         addRow(layoutGrid, row++, "X", xField);
         addRow(layoutGrid, row++, "Y", yField);
         addRow(layoutGrid, row++, "Width", wField);
@@ -105,7 +111,7 @@ public class InspectorPane extends VBox {
         setupGrid(behaviorGrid);
         row = 0;
         addRow(behaviorGrid, row++, "Tooltip", tooltipField);
-        behaviorGrid.add(disabledBox, 0, row++, 2, 1);
+        behaviorGrid.add(new javafx.scene.layout.HBox(12, disabledBox, lockedBox), 0, row++, 2, 1);
         itemsArea.setPrefRowCount(3);
         itemsArea.setPrefWidth(110);
         itemsArea.setPromptText("One item per line");
@@ -141,12 +147,21 @@ public class InspectorPane extends VBox {
         for (var section : java.util.List.of(layoutSection, appearanceSection, behaviorSection, formSection)) {
             section.setAnimated(false);
         }
+        // standalone checkbox rows take part in property search too
+        register(customBg, customBg);
+        register(disabledBox, disabledBox);
+        register(lockedBox, lockedBox);
+        register(resizableBox, resizableBox);
+
+        searchField.setPromptText("Search properties…");
+        searchField.textProperty().addListener((obs, was, is) -> applyRowVisibility());
+
         VBox sections = new VBox(4, layoutSection, appearanceSection, behaviorSection, formSection);
         javafx.scene.control.ScrollPane scroll = new javafx.scene.control.ScrollPane(sections);
         scroll.setFitToWidth(true);
         scroll.setStyle("-fx-background-color: transparent;");
         VBox.setVgrow(scroll, javafx.scene.layout.Priority.ALWAYS);
-        getChildren().addAll(header, scroll);
+        getChildren().addAll(header, searchField, scroll);
 
         wireComponentEdits();
         wireFormEdits();
@@ -175,14 +190,32 @@ public class InspectorPane extends VBox {
         if (control instanceof TextField field) {
             field.setPrefWidth(110);
         }
+        register(label, control);
         return label;
     }
 
-    private static void setRowVisible(javafx.scene.Node label, javafx.scene.Node control, boolean visible) {
-        label.setVisible(visible);
-        label.setManaged(visible);
-        control.setVisible(visible);
-        control.setManaged(visible);
+    private void register(javafx.scene.Node labelNode, javafx.scene.Node control) {
+        labelNode.getProperties().put("rowBase", Boolean.TRUE);
+        searchRows.add(new javafx.scene.Node[]{labelNode, control});
+    }
+
+    /** Sets a row's base (per-type) visibility; the search filter composes on top. */
+    private void setRowVisible(javafx.scene.Node label, javafx.scene.Node control, boolean visible) {
+        label.getProperties().put("rowBase", visible);
+        applyRowVisibility();
+    }
+
+    private void applyRowVisibility() {
+        String q = searchField.getText() == null ? "" : searchField.getText().trim().toLowerCase();
+        for (javafx.scene.Node[] row : searchRows) {
+            boolean base = !Boolean.FALSE.equals(row[0].getProperties().get("rowBase"));
+            String text = row[0] instanceof javafx.scene.control.Labeled labeled ? labeled.getText() : "";
+            boolean visible = base && (q.isEmpty() || text.toLowerCase().contains(q));
+            for (javafx.scene.Node node : row) {
+                node.setVisible(visible);
+                node.setManaged(visible);
+            }
+        }
     }
 
     public void setModel(FormModel model) {
@@ -206,10 +239,24 @@ public class InspectorPane extends VBox {
         this.nameInUse = nameInUse;
     }
 
+    /** Callback that performs the actual component rename (with refactoring); returns success. */
+    public void setRenamer(java.util.function.BiPredicate<FormComponent, String> renamer) {
+        this.renamer = renamer;
+    }
+
+    /** Focus the Id field for an F2 rename. */
+    public void focusIdField() {
+        if (current != null) {
+            idField.requestFocus();
+            idField.selectAll();
+        }
+    }
+
     public void showComponent(FormComponent c) {
         current = c;
         updating = true;
         header.setText(c.getType().displayName + " — " + c.getId());
+        idField.setText(c.getId());
         xField.setText(num(c.getX()));
         yField.setText(num(c.getY()));
         wField.setText(num(c.getWidth()));
@@ -238,6 +285,7 @@ public class InspectorPane extends VBox {
         setRowVisible(imageLabel, imageButtons, c.getType() == ComponentType.IMAGE_VIEW);
         tooltipField.setText(c.getTooltip());
         disabledBox.setSelected(c.isDisabled());
+        lockedBox.setSelected(c.isLocked());
         setRowVisible(alignLabel, alignBox, Renderer.supportsAlignment(c.getType()));
         alignBox.setValue(switch (c.getAlignment()) {
             case "LEFT" -> "Left";
@@ -286,6 +334,21 @@ public class InspectorPane extends VBox {
     }
 
     private void wireComponentEdits() {
+        onCommit(idField, () -> {
+            if (current == null || updating) {
+                return;
+            }
+            String raw = idField.getText().trim();
+            if (raw.equals(current.getId())) {
+                return;
+            }
+            if (renamer.test(current, raw)) {
+                header.setText(current.getType().displayName + " — " + current.getId());
+                idField.setText(current.getId());
+            } else {
+                idField.setText(current.getId());
+            }
+        });
         onCommit(xField, () -> applyNumber(xField, FormComponent::getX, (c, v) -> c.setX(v)));
         onCommit(yField, () -> applyNumber(yField, FormComponent::getY, (c, v) -> c.setY(v)));
         onCommit(wField, () -> applyNumber(wField, FormComponent::getWidth, (c, v) -> c.setWidth(Math.max(16, v))));
@@ -317,6 +380,8 @@ public class InspectorPane extends VBox {
         });
         disabledBox.setOnAction(e ->
                 applyComponent(() -> current.setDisabled(disabledBox.isSelected())));
+        lockedBox.setOnAction(e ->
+                applyComponent(() -> current.setLocked(lockedBox.isSelected())));
         anchorL.setOnAction(e -> applyComponent(() -> current.setAnchorLeft(anchorL.isSelected())));
         anchorT.setOnAction(e -> applyComponent(() -> current.setAnchorTop(anchorT.isSelected())));
         anchorR.setOnAction(e -> applyComponent(() -> current.setAnchorRight(anchorR.isSelected())));

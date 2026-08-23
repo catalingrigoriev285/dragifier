@@ -311,6 +311,24 @@ public class EventEditorPane extends VBox {
         codeArea.requestFocus();
     }
 
+    /** Selects the event with the given key in the event chooser (if present). */
+    public void selectEvent(String key) {
+        for (EventSpec spec : eventBox.getItems()) {
+            if (spec.key().equals(key)) {
+                eventBox.getSelectionModel().select(spec);
+                return;
+            }
+        }
+    }
+
+    /** Moves the caret to the given 0-based line and focuses the editor. */
+    public void focusLine(int line) {
+        int target = Math.max(0, Math.min(line, codeArea.getParagraphs().size() - 1));
+        codeArea.moveTo(target, 0);
+        codeArea.requestFollowCaret();
+        codeArea.requestFocus();
+    }
+
     private void loadCode() {
         if (currentEvents == null) {
             return;

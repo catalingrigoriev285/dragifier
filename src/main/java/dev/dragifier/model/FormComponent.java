@@ -23,6 +23,8 @@ public class FormComponent {
     private String imageData = "";
     private String tooltip = "";
     private boolean disabled = false;
+    /** Design-time only: locked components can't be moved/resized on the canvas. */
+    private boolean locked = false;
     /** Text alignment: "LEFT", "CENTER", "RIGHT", or "" for the type's default. */
     private String alignment = "";
     /** Edge anchoring for resizable forms; left+top are the classic defaults. */
@@ -81,6 +83,9 @@ public class FormComponent {
 
     public boolean isDisabled() { return disabled; }
     public void setDisabled(boolean disabled) { this.disabled = disabled; }
+
+    public boolean isLocked() { return locked; }
+    public void setLocked(boolean locked) { this.locked = locked; }
 
     public String getAlignment() { return alignment == null ? "" : alignment; }
     public void setAlignment(String alignment) { this.alignment = alignment; }

@@ -132,6 +132,8 @@ public final class CodegenSmoke {
         System.out.println("SMOKE OK: media resource written.");
 
         checkUndoRedo(project, label);
+        checkRename(project, form, button);
+        checkSourceMap(project, button);
 
         for (var template : dev.dragifier.model.Templates.all()) {
             AppRunner.CompileResult tr = AppRunner.compile(template.factory().get());
@@ -143,6 +145,53 @@ public final class CodegenSmoke {
         }
         System.out.println("SMOKE OK: all " + dev.dragifier.model.Templates.all().size()
                 + " templates compile.");
+    }
+
+    private static void checkRename(ProjectModel project, FormModel form, FormComponent button) throws Exception {
+        if (form.renameComponent(button, "1bad") || form.renameComponent(button, "label1")) {
+            System.err.println("SMOKE FAILED: invalid/duplicate rename was accepted");
+            System.exit(1);
+        }
+        if (!form.renameComponent(button, "greetButton")) {
+            System.err.println("SMOKE FAILED: valid rename rejected");
+            System.exit(1);
+        }
+        // the button's own handler references other ids, and other code may reference it;
+        // verify the project still compiles after the refactor
+        AppRunner.CompileResult renamed = AppRunner.compile(project);
+        if (!renamed.ok()) {
+            System.err.println("SMOKE FAILED: project does not compile after rename:\n" + renamed.errorDetails());
+            System.exit(1);
+        }
+        form.renameComponent(button, "button1");
+        System.out.println("SMOKE OK: component rename refactors and still compiles.");
+    }
+
+    private static void checkSourceMap(ProjectModel project, FormComponent button) throws Exception {
+        String original = button.getEvents().get("onAction");
+        int brokenUserLine = (int) original.lines().count(); // the appended line's 0-based index
+        button.getEvents().put("onAction", original + "\nthis is not java");
+        AppRunner.CompileResult broken = AppRunner.compile(project);
+        button.getEvents().put("onAction", original);
+        if (broken.ok() || broken.errors().isEmpty()) {
+            System.err.println("SMOKE FAILED: broken event code compiled anyway");
+            System.exit(1);
+        }
+        AppRunner.CompileError first = broken.errors().get(0);
+        var entry = broken.map().resolve(first.file(), first.line());
+        if (entry == null || !button.getId().equals(entry.componentId())
+                || !"onAction".equals(entry.eventKey())) {
+            System.err.println("SMOKE FAILED: source map did not resolve to " + button.getId()
+                    + ".onAction (got " + entry + ")");
+            System.exit(1);
+        }
+        long userLine = entry.userLine() + Math.max(0, first.line() - entry.generatedLine());
+        if (userLine != brokenUserLine) {
+            System.err.println("SMOKE FAILED: source map resolved to user line " + userLine
+                    + " instead of " + brokenUserLine);
+            System.exit(1);
+        }
+        System.out.println("SMOKE OK: compile errors map back to the exact event line.");
     }
 
     private static void checkUndoRedo(ProjectModel project, FormComponent label) {

@@ -71,12 +71,45 @@ public class FormModel {
         c.setColumns(src.getColumns());
         c.setMediaData(src.getMediaData());
         c.setMediaFormat(src.getMediaFormat());
+        c.setLocked(src.isLocked());
         c.setAnchorLeft(src.isAnchorLeft());
         c.setAnchorTop(src.isAnchorTop());
         c.setAnchorRight(src.isAnchorRight());
         c.setAnchorBottom(src.isAnchorBottom());
         c.getEvents().putAll(src.getEvents());
         return c;
+    }
+
+    /** True when {@code newId} is a valid, unused id this component could take. */
+    public boolean canRename(FormComponent c, String newId) {
+        if (newId == null || newId.isEmpty() || Character.isDigit(newId.charAt(0))) {
+            return false;
+        }
+        for (char ch : newId.toCharArray()) {
+            if (!Character.isJavaIdentifierPart(ch)) {
+                return false;
+            }
+        }
+        if (newId.equals("stage") || newId.equals("root") || newId.equals("UI")) {
+            return false;
+        }
+        return components.stream().noneMatch(other -> other != c && newId.equals(other.getId()));
+    }
+
+    /** Renames a component and updates references in this form's event code. */
+    public boolean renameComponent(FormComponent c, String newId) {
+        if (!canRename(c, newId)) {
+            return false;
+        }
+        String oldId = c.getId();
+        c.setId(newId);
+        java.util.regex.Pattern ref = java.util.regex.Pattern.compile(
+                "\\b" + java.util.regex.Pattern.quote(oldId) + "\\b");
+        for (FormComponent comp : components) {
+            comp.getEvents().replaceAll((key, code) -> ref.matcher(code).replaceAll(newId));
+        }
+        getEvents().replaceAll((key, code) -> ref.matcher(code).replaceAll(newId));
+        return true;
     }
 
     private String nextId(ComponentType type) {

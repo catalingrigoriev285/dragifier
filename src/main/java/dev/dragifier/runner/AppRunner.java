@@ -38,18 +38,24 @@ public final class AppRunner {
      * the JavaFX application thread.
      */
     public static void run(ProjectModel project, Consumer<String> status,
-                           BiConsumer<String, String> error, Consumer<String> output) {
+                           BiConsumer<String, String> error, Consumer<String> output,
+                           Consumer<CompileResult> onCompileErrors) {
         Thread thread = new Thread(() -> execute(project,
                 s -> Platform.runLater(() -> status.accept(s)),
                 (h, d) -> Platform.runLater(() -> error.accept(h, d)),
-                line -> Platform.runLater(() -> output.accept(line))),
+                line -> Platform.runLater(() -> output.accept(line)),
+                result -> Platform.runLater(() -> onCompileErrors.accept(result))),
                 "dragifier-runner");
         thread.setDaemon(true);
         thread.start();
     }
 
-    /** Result of compiling a form: output dir, class name, and error details (null when compilation succeeded). */
-    public record CompileResult(Path dir, String className, String errorDetails) {
+    /** One compile error, with the generated file it occurred in. */
+    public record CompileError(String file, long line, String message) {}
+
+    /** Result of compiling a project: output dir, launcher class, errors (empty = success), and the source map. */
+    public record CompileResult(Path dir, String className, String errorDetails,
+                                List<CompileError> errors, dev.dragifier.codegen.SourceMap map) {
         public boolean ok() {
             return errorDetails == null;
         }
@@ -58,8 +64,9 @@ public final class AppRunner {
     /** Generates all project sources into a temp dir and compiles them with the in-process javac. */
     public static CompileResult compile(ProjectModel project) throws Exception {
         Path dir = Files.createTempDirectory("dragifier-run");
+        dev.dragifier.codegen.SourceMap map = new dev.dragifier.codegen.SourceMap();
         List<Path> sourceFiles = new ArrayList<>();
-        for (Map.Entry<String, String> entry : JavaCodeGenerator.generateProject(project).entrySet()) {
+        for (Map.Entry<String, String> entry : JavaCodeGenerator.generateProject(project, map).entrySet()) {
             Path src = dir.resolve(entry.getKey());
             Files.writeString(src, entry.getValue(), StandardCharsets.UTF_8);
             sourceFiles.add(src);
@@ -68,7 +75,8 @@ public final class AppRunner {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         if (compiler == null) {
             return new CompileResult(dir, JavaCodeGenerator.LAUNCHER_CLASS,
-                    "No Java compiler available — the IDE must run on a JDK (not a JRE).");
+                    "No Java compiler available — the IDE must run on a JDK (not a JRE).",
+                    List.of(), map);
         }
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
         boolean ok;
@@ -82,15 +90,20 @@ public final class AppRunner {
                     fm.getJavaFileObjectsFromPaths(sourceFiles)).call();
         }
         if (!ok) {
-            String details = diagnostics.getDiagnostics().stream()
+            List<CompileError> errors = diagnostics.getDiagnostics().stream()
                     .filter(d -> d.getKind() == Diagnostic.Kind.ERROR)
-                    .map(d -> d.getSource().getName() + " line " + d.getLineNumber() + ": " + d.getMessage(null))
+                    .map(d -> new CompileError(
+                            d.getSource() == null ? "" : d.getSource().getName(),
+                            d.getLineNumber(), d.getMessage(null)))
+                    .toList();
+            String details = errors.stream()
+                    .map(e -> e.file() + " line " + e.line() + ": " + e.message())
                     .collect(Collectors.joining("\n"));
             return new CompileResult(dir, JavaCodeGenerator.LAUNCHER_CLASS,
-                    details.isEmpty() ? "Unknown compile error" : details);
+                    details.isEmpty() ? "Unknown compile error" : details, errors, map);
         }
         writeImageResources(project, dir);
-        return new CompileResult(dir, JavaCodeGenerator.LAUNCHER_CLASS, null);
+        return new CompileResult(dir, JavaCodeGenerator.LAUNCHER_CLASS, null, List.of(), map);
     }
 
     /** Writes each Image component's bytes next to the classes so getResourceAsStream finds them. */
@@ -114,12 +127,17 @@ public final class AppRunner {
     }
 
     private static void execute(ProjectModel project, Consumer<String> status,
-                                BiConsumer<String, String> error, Consumer<String> output) {
+                                BiConsumer<String, String> error, Consumer<String> output,
+                                Consumer<CompileResult> onCompileErrors) {
         try {
             status.accept("Compiling…");
             CompileResult result = compile(project);
             if (!result.ok()) {
-                error.accept("Compilation failed", result.errorDetails());
+                if (result.errors().isEmpty()) {
+                    error.accept("Compilation failed", result.errorDetails());
+                } else {
+                    onCompileErrors.accept(result);
+                }
                 status.accept("Compilation failed");
                 return;
             }

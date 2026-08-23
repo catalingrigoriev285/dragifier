@@ -57,6 +57,8 @@ public class DesignCanvas extends Pane {
     private Runnable onStructureChanged = () -> {};
     private Consumer<FormComponent> onOpenEvents = c -> {};
     private Consumer<String> checkpoint = tag -> {};
+    private Consumer<Boolean> onZOrderRequest = front -> {};
+    private Runnable onRenameRequest = () -> {};
 
     private List<FormComponent> copied = List.of();
 
@@ -134,6 +136,12 @@ public class DesignCanvas extends Pane {
             marqueeAnchor = null;
         });
         setOnKeyPressed(this::handleKey);
+        setOnContextMenuRequested(e -> {
+            if (e.getTarget() == this) {
+                buildCanvasMenu().show(this, e.getScreenX(), e.getScreenY());
+                e.consume();
+            }
+        });
 
         setOnDragOver(e -> {
             if (e.getDragboard().hasString()) {
@@ -186,6 +194,8 @@ public class DesignCanvas extends Pane {
     public void setOnStructureChanged(Runnable onStructureChanged) { this.onStructureChanged = onStructureChanged; }
     public void setOnOpenEvents(Consumer<FormComponent> onOpenEvents) { this.onOpenEvents = onOpenEvents; }
     public void setOnCheckpoint(Consumer<String> checkpoint) { this.checkpoint = checkpoint; }
+    public void setOnZOrderRequest(Consumer<Boolean> onZOrderRequest) { this.onZOrderRequest = onZOrderRequest; }
+    public void setOnRenameRequest(Runnable onRenameRequest) { this.onRenameRequest = onRenameRequest; }
 
     /** The primary (first-selected) component, or null. */
     public FormComponent getSelected() {
@@ -241,6 +251,7 @@ public class DesignCanvas extends Pane {
         Renderer.apply(node, c);
         positionWrapper(c, wrapper);
         if (c == getSelected()) {
+            handleGroup.setVisible(selection.size() == 1 && !c.isLocked());
             layoutHandles();
         }
     }
@@ -264,7 +275,7 @@ public class DesignCanvas extends Pane {
                 entry.getValue().getStyleClass().add("design-selected");
             }
         }
-        handleGroup.setVisible(selection.size() == 1);
+        handleGroup.setVisible(selection.size() == 1 && !getSelected().isLocked());
         if (selection.size() == 1) {
             layoutHandles();
         }
@@ -340,8 +351,15 @@ public class DesignCanvas extends Pane {
             }
             e.consume();
         });
+        wrapper.setOnContextMenuRequested(e -> {
+            if (!selection.contains(c)) {
+                select(c);
+            }
+            buildComponentMenu().show(wrapper, e.getScreenX(), e.getScreenY());
+            e.consume();
+        });
         wrapper.setOnMouseDragged(e -> {
-            if (pressPoint == null || !selection.contains(c)) {
+            if (pressPoint == null || !selection.contains(c) || c.isLocked()) {
                 return;
             }
             if (!moveCheckpointed) {
@@ -385,7 +403,7 @@ public class DesignCanvas extends Pane {
         double ady = ny - origin.getY();
         for (FormComponent s : selection) {
             Point2D so = dragOrigins.get(s);
-            if (so == null) {
+            if (so == null || s.isLocked()) {
                 continue;
             }
             adx = clamp(adx, -so.getX(), Math.max(-so.getX(), model.getWidth() - s.getWidth() - so.getX()));
@@ -393,7 +411,7 @@ public class DesignCanvas extends Pane {
         }
         for (FormComponent s : selection) {
             Point2D so = dragOrigins.get(s);
-            if (so == null) {
+            if (so == null || s.isLocked()) {
                 continue;
             }
             s.setX(so.getX() + adx);
@@ -594,6 +612,64 @@ public class DesignCanvas extends Pane {
         }
     }
 
+    private javafx.scene.control.ContextMenu buildComponentMenu() {
+        javafx.scene.control.ContextMenu menu = new javafx.scene.control.ContextMenu();
+        boolean allLocked = selection.stream().allMatch(FormComponent::isLocked);
+        javafx.scene.control.Menu alignMenu = new javafx.scene.control.Menu("Align");
+        alignMenu.setDisable(selection.size() < 2);
+        alignMenu.getItems().addAll(
+                menuItem("Left", () -> align(AlignOp.LEFT)),
+                menuItem("Right", () -> align(AlignOp.RIGHT)),
+                menuItem("Top", () -> align(AlignOp.TOP)),
+                menuItem("Bottom", () -> align(AlignOp.BOTTOM)),
+                menuItem("Center Horizontally", () -> align(AlignOp.CENTER_H)),
+                menuItem("Center Vertically", () -> align(AlignOp.CENTER_V)),
+                menuItem("Same Size", () -> align(AlignOp.SAME_SIZE)));
+        menu.getItems().addAll(
+                menuItem("Cut", () -> { copySelected(); deleteSelected(); }),
+                menuItem("Copy", this::copySelected),
+                menuItem("Paste", this::paste),
+                menuItem("Duplicate", this::duplicateSelected),
+                menuItem("Delete", this::deleteSelected),
+                new javafx.scene.control.SeparatorMenuItem(),
+                menuItem("Bring to Front", () -> onZOrderRequest.accept(true)),
+                menuItem("Send to Back", () -> onZOrderRequest.accept(false)),
+                new javafx.scene.control.SeparatorMenuItem(),
+                menuItem(allLocked ? "Unlock" : "Lock", this::toggleLockSelected),
+                new javafx.scene.control.SeparatorMenuItem(),
+                alignMenu);
+        return menu;
+    }
+
+    private javafx.scene.control.ContextMenu buildCanvasMenu() {
+        javafx.scene.control.ContextMenu menu = new javafx.scene.control.ContextMenu();
+        menu.getItems().addAll(
+                menuItem("Paste", this::paste),
+                menuItem("Select All", this::selectAll));
+        return menu;
+    }
+
+    private javafx.scene.control.MenuItem menuItem(String text, Runnable action) {
+        javafx.scene.control.MenuItem item = new javafx.scene.control.MenuItem(text);
+        item.setOnAction(e -> action.run());
+        return item;
+    }
+
+    /** Locks all selected components, or unlocks them when all are already locked. */
+    public void toggleLockSelected() {
+        if (selection.isEmpty()) {
+            return;
+        }
+        boolean lock = !selection.stream().allMatch(FormComponent::isLocked);
+        checkpoint.accept(null);
+        for (FormComponent c : selection) {
+            c.setLocked(lock);
+        }
+        handleGroup.setVisible(selection.size() == 1 && !getSelected().isLocked());
+        onStructureChanged.run();
+        onSelectionChanged.accept(getSelectionList());
+    }
+
     public void copySelected() {
         if (!selection.isEmpty()) {
             copied = List.copyOf(selection);
@@ -658,6 +734,7 @@ public class DesignCanvas extends Pane {
         }
         double step = e.isShiftDown() ? GRID : 1;
         switch (e.getCode()) {
+            case F2 -> onRenameRequest.run();
             case DELETE, BACK_SPACE -> deleteSelected();
             case LEFT -> nudge(-step, 0);
             case RIGHT -> nudge(step, 0);
@@ -670,13 +747,22 @@ public class DesignCanvas extends Pane {
 
     private void nudge(double dx, double dy) {
         FormComponent primary = getSelected();
+        if (selection.stream().allMatch(FormComponent::isLocked)) {
+            return;
+        }
         checkpoint.accept("nudge:" + primary.getId());
         // clamp the shared delta so the whole selection stays inside the form
         for (FormComponent s : selection) {
+            if (s.isLocked()) {
+                continue;
+            }
             dx = clamp(dx, -s.getX(), Math.max(-s.getX(), model.getWidth() - s.getWidth() - s.getX()));
             dy = clamp(dy, -s.getY(), Math.max(-s.getY(), model.getHeight() - s.getHeight() - s.getY()));
         }
         for (FormComponent s : selection) {
+            if (s.isLocked()) {
+                continue;
+            }
             s.setX(s.getX() + dx);
             s.setY(s.getY() + dy);
             positionWrapper(s, wrappers.get(s));

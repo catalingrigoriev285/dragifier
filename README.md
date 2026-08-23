@@ -144,9 +144,22 @@ gradlew run
   checkboxes per component — anchor left+right (or top+bottom) to stretch with the
   window, classic RAD behavior. Focus (tab) order follows z-order (Arrange menu).
 
+## What works (milestone 16 — RAD ergonomics round)
+
+- **Resizable panels**: palette/tree, canvas, and inspector sit in draggable splitters.
+- **Component rename** (Id field or F2): `button1` → `saveButton` with every reference in
+  the form's event code updated automatically; invalid/duplicate ids are rejected.
+- **Canvas context menu** (cut/copy/paste/duplicate/delete, z-order, lock, align) and
+  a **Locked** flag — locked components select but can't be moved or resized.
+- **Order editor** (Arrange → Order…) and drag-to-reorder in the Components tree —
+  precise z-order and focus order.
+- **Palette filter** and **property search** in the inspector.
+- **Compile errors are navigable**: a Problems dialog lists them; Go to Code selects the
+  component, opens the right event, and puts the caret on the offending line.
+
 ## Roadmap
 
-- Deferred by choice: behaviors (no-code animations/drag), auto-save/backups, game features
+- Deferred by choice: behaviors, auto-save/backups, multi-select property editing, duplicate form, game features
 
 ## Project layout
 
