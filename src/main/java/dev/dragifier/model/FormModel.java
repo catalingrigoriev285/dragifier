@@ -5,6 +5,8 @@ import java.util.List;
 
 /** The whole form being designed: window properties plus placed components. */
 public class FormModel {
+    /** Unique form name; becomes the generated Java class name. */
+    private String name = "Form1";
     private String title = "My App";
     private double width = 640;
     private double height = 480;
@@ -41,6 +43,7 @@ public class FormModel {
         c.setBackground(src.getBackground());
         c.setItems(src.getItems());
         c.setValue(src.getValue());
+        c.setImageData(src.getImageData());
         c.getEvents().putAll(src.getEvents());
         return c;
     }
@@ -56,6 +59,9 @@ public class FormModel {
     private boolean hasId(String id) {
         return components.stream().anyMatch(c -> id.equals(c.getId()));
     }
+
+    public String getName() { return name == null || name.isBlank() ? "Form1" : name; }
+    public void setName(String name) { this.name = name; }
 
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }

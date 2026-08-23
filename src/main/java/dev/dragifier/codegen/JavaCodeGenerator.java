@@ -1,89 +1,134 @@
 package dev.dragifier.codegen;
 
+import dev.dragifier.model.ComponentType;
 import dev.dragifier.model.EventSpec;
 import dev.dragifier.model.FormComponent;
 import dev.dragifier.model.FormModel;
+import dev.dragifier.model.ProjectModel;
 import dev.dragifier.ui.Renderer;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
- * Generates a standalone JavaFX application source file from a form model.
- * Components are emitted as fields so event handler code can reference any
- * component on the form by its id.
+ * Generates Java sources from a project: one {@code Stage} subclass per form
+ * (named after the form, components as fields so event handlers can reference
+ * them by id) plus a {@code Main} application class that opens the main form.
+ * Opening another form from user code is plain Java: {@code new Form2().show();}
  */
 public final class JavaCodeGenerator {
 
+    public static final String MAIN_CLASS = "Main";
+
     private JavaCodeGenerator() {}
 
-    public static String className(FormModel model) {
+    /** The form's generated class name, derived from its name. */
+    public static String className(FormModel form) {
         StringBuilder sb = new StringBuilder();
-        for (char ch : model.getTitle().toCharArray()) {
+        for (char ch : form.getName().toCharArray()) {
             if (Character.isLetterOrDigit(ch)) {
                 sb.append(ch);
             }
         }
         if (sb.isEmpty() || Character.isDigit(sb.charAt(0))) {
-            return "MainForm";
+            return "Form";
         }
         sb.setCharAt(0, Character.toUpperCase(sb.charAt(0)));
         return sb.toString();
     }
 
-    public static String generate(FormModel model) {
-        String cls = className(model);
+    /** The jar resource name for an Image component's bytes. */
+    public static String imageResource(FormModel form, FormComponent c) {
+        return className(form) + "_" + c.getId() + ".img";
+    }
+
+    /** All sources for the project, filename → content. */
+    public static Map<String, String> generateProject(ProjectModel project) {
+        Map<String, String> sources = new LinkedHashMap<>();
+        for (FormModel form : project.getForms()) {
+            sources.put(className(form) + ".java", formSource(form));
+        }
+        sources.put(MAIN_CLASS + ".java", mainSource(project));
+        return sources;
+    }
+
+    private static String mainSource(ProjectModel project) {
+        return "import javafx.application.Application;\n"
+                + "import javafx.stage.Stage;\n\n"
+                + "public class " + MAIN_CLASS + " extends Application {\n\n"
+                + "    @Override\n"
+                + "    public void start(Stage primaryStage) {\n"
+                + "        new " + className(project.effectiveMain()) + "().show();\n"
+                + "    }\n\n"
+                + "    public static void main(String[] args) {\n"
+                + "        launch(args);\n"
+                + "    }\n"
+                + "}\n";
+    }
+
+    private static String formSource(FormModel form) {
+        String cls = className(form);
         StringBuilder out = new StringBuilder();
-        out.append("import javafx.application.Application;\n");
         out.append("import javafx.scene.Scene;\n");
         out.append("import javafx.scene.control.*;\n");
+        out.append("import javafx.scene.image.Image;\n");
+        out.append("import javafx.scene.image.ImageView;\n");
         out.append("import javafx.scene.layout.Pane;\n");
         out.append("import javafx.stage.Stage;\n\n");
-        out.append("public class ").append(cls).append(" extends Application {\n\n");
-        out.append("    private Stage stage;\n");
-        for (FormComponent c : model.getComponents()) {
+        out.append("public class ").append(cls).append(" extends Stage {\n\n");
+        out.append("    private final Stage stage = this;\n");
+        for (FormComponent c : form.getComponents()) {
             out.append("    private ").append(javaTypeFor(c)).append(" ").append(c.getId()).append(";\n");
         }
         out.append("\n");
-        out.append("    @Override\n");
-        out.append("    public void start(Stage primaryStage) {\n");
-        out.append("        this.stage = primaryStage;\n");
+        out.append("    public ").append(cls).append("() {\n");
         out.append("        Pane root = new Pane();\n");
-        out.append("        root.setPrefSize(").append(fmt(model.getWidth()))
-           .append(", ").append(fmt(model.getHeight())).append(");\n\n");
+        out.append("        root.setPrefSize(").append(fmt(form.getWidth()))
+           .append(", ").append(fmt(form.getHeight())).append(");\n\n");
 
-        for (FormComponent c : model.getComponents()) {
+        for (FormComponent c : form.getComponents()) {
             String var = c.getId();
             out.append("        ").append(var).append(" = new ").append(javaTypeFor(c)).append("();\n");
             if (hasText(c)) {
                 out.append("        ").append(var).append(".setText(\"")
                    .append(escape(c.getText())).append("\");\n");
             }
-            appendTypeSpecific(out, c);
+            appendTypeSpecific(out, form, c, cls);
             out.append("        ").append(var).append(".setLayoutX(").append(fmt(c.getX())).append(");\n");
             out.append("        ").append(var).append(".setLayoutY(").append(fmt(c.getY())).append(");\n");
-            out.append("        ").append(var).append(".setPrefSize(").append(fmt(c.getWidth()))
-               .append(", ").append(fmt(c.getHeight())).append(");\n");
-            out.append("        ").append(var).append(".setStyle(\"")
-               .append(escape(Renderer.styleFor(c))).append("\");\n");
+            if (c.getType() == ComponentType.IMAGE_VIEW) {
+                out.append("        ").append(var).append(".setFitWidth(").append(fmt(c.getWidth())).append(");\n");
+                out.append("        ").append(var).append(".setFitHeight(").append(fmt(c.getHeight())).append(");\n");
+            } else {
+                out.append("        ").append(var).append(".setPrefSize(").append(fmt(c.getWidth()))
+                   .append(", ").append(fmt(c.getHeight())).append(");\n");
+                out.append("        ").append(var).append(".setStyle(\"")
+                   .append(escape(Renderer.styleFor(c))).append("\");\n");
+            }
             appendEvents(out, c);
             out.append("        root.getChildren().add(").append(var).append(");\n\n");
         }
 
-        out.append("        stage.setTitle(\"").append(escape(model.getTitle())).append("\");\n");
-        out.append("        stage.setScene(new Scene(root));\n");
-        out.append("        stage.setResizable(false);\n");
-        out.append("        stage.show();\n");
-        out.append("    }\n\n");
-        out.append("    public static void main(String[] args) {\n");
-        out.append("        launch(args);\n");
+        out.append("        setTitle(\"").append(escape(form.getTitle())).append("\");\n");
+        out.append("        setScene(new Scene(root));\n");
+        out.append("        setResizable(false);\n");
         out.append("    }\n");
         out.append("}\n");
         return out.toString();
     }
 
-    private static void appendTypeSpecific(StringBuilder out, FormComponent c) {
+    private static void appendTypeSpecific(StringBuilder out, FormModel form, FormComponent c, String cls) {
         String var = c.getId();
         switch (c.getType()) {
+            case IMAGE_VIEW -> {
+                if (!c.getImageData().isEmpty()) {
+                    out.append("        ").append(var).append(".setImage(new Image(")
+                       .append(cls).append(".class.getResourceAsStream(\"/")
+                       .append(imageResource(form, c)).append("\")));\n");
+                }
+            }
             case COMBO_BOX, LIST_VIEW -> {
-                var items = dev.dragifier.ui.Renderer.itemList(c);
+                var items = Renderer.itemList(c);
                 if (!items.isEmpty()) {
                     out.append("        ").append(var).append(".getItems().addAll(");
                     for (int i = 0; i < items.size(); i++) {
@@ -94,7 +139,7 @@ public final class JavaCodeGenerator {
                     }
                     out.append(");\n");
                 }
-                if (c.getType() == dev.dragifier.model.ComponentType.COMBO_BOX && !c.getText().isEmpty()) {
+                if (c.getType() == ComponentType.COMBO_BOX && !c.getText().isEmpty()) {
                     out.append("        ").append(var).append(".setPromptText(\"")
                        .append(escape(c.getText())).append("\");\n");
                 }
@@ -140,13 +185,14 @@ public final class JavaCodeGenerator {
             case RADIO_BUTTON -> "RadioButton";
             case PROGRESS_BAR -> "ProgressBar";
             case HYPERLINK -> "Hyperlink";
+            case IMAGE_VIEW -> "ImageView";
         };
     }
 
     private static boolean hasText(FormComponent c) {
         return switch (c.getType()) {
             case BUTTON, LABEL, TEXT_FIELD, TEXT_AREA, CHECK_BOX, RADIO_BUTTON, HYPERLINK -> true;
-            case SLIDER, PANEL, COMBO_BOX, LIST_VIEW, PROGRESS_BAR -> false;
+            case SLIDER, PANEL, COMBO_BOX, LIST_VIEW, PROGRESS_BAR, IMAGE_VIEW -> false;
         };
     }
 

@@ -2,6 +2,7 @@ package dev.dragifier.runner;
 
 import dev.dragifier.codegen.JavaCodeGenerator;
 import dev.dragifier.model.FormModel;
+import dev.dragifier.model.ProjectModel;
 import javafx.application.Platform;
 
 import javax.tools.Diagnostic;
@@ -17,6 +18,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -34,8 +36,8 @@ public final class AppRunner {
      * Runs asynchronously. {@code status} and {@code error} are always invoked
      * on the JavaFX application thread.
      */
-    public static void run(FormModel model, Consumer<String> status, BiConsumer<String, String> error) {
-        Thread thread = new Thread(() -> execute(model,
+    public static void run(ProjectModel project, Consumer<String> status, BiConsumer<String, String> error) {
+        Thread thread = new Thread(() -> execute(project,
                 s -> Platform.runLater(() -> status.accept(s)),
                 (h, d) -> Platform.runLater(() -> error.accept(h, d))),
                 "dragifier-runner");
@@ -50,16 +52,20 @@ public final class AppRunner {
         }
     }
 
-    /** Generates the form's source into a temp dir and compiles it with the in-process javac. */
-    public static CompileResult compile(FormModel model) throws Exception {
+    /** Generates all project sources into a temp dir and compiles them with the in-process javac. */
+    public static CompileResult compile(ProjectModel project) throws Exception {
         Path dir = Files.createTempDirectory("dragifier-run");
-        String cls = JavaCodeGenerator.className(model);
-        Path src = dir.resolve(cls + ".java");
-        Files.writeString(src, JavaCodeGenerator.generate(model), StandardCharsets.UTF_8);
+        List<Path> sourceFiles = new ArrayList<>();
+        for (Map.Entry<String, String> entry : JavaCodeGenerator.generateProject(project).entrySet()) {
+            Path src = dir.resolve(entry.getKey());
+            Files.writeString(src, entry.getValue(), StandardCharsets.UTF_8);
+            sourceFiles.add(src);
+        }
 
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         if (compiler == null) {
-            return new CompileResult(dir, cls, "No Java compiler available — the IDE must run on a JDK (not a JRE).");
+            return new CompileResult(dir, JavaCodeGenerator.MAIN_CLASS,
+                    "No Java compiler available — the IDE must run on a JDK (not a JRE).");
         }
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
         boolean ok;
@@ -70,22 +76,36 @@ public final class AppRunner {
                 options.addAll(List.of("--module-path", modulePath, "--add-modules", "javafx.controls"));
             }
             ok = compiler.getTask(null, fm, diagnostics, options, null,
-                    fm.getJavaFileObjects(src)).call();
+                    fm.getJavaFileObjectsFromPaths(sourceFiles)).call();
         }
         if (!ok) {
             String details = diagnostics.getDiagnostics().stream()
                     .filter(d -> d.getKind() == Diagnostic.Kind.ERROR)
-                    .map(d -> "line " + d.getLineNumber() + ": " + d.getMessage(null))
+                    .map(d -> d.getSource().getName() + " line " + d.getLineNumber() + ": " + d.getMessage(null))
                     .collect(Collectors.joining("\n"));
-            return new CompileResult(dir, cls, details.isEmpty() ? "Unknown compile error" : details);
+            return new CompileResult(dir, JavaCodeGenerator.MAIN_CLASS,
+                    details.isEmpty() ? "Unknown compile error" : details);
         }
-        return new CompileResult(dir, cls, null);
+        writeImageResources(project, dir);
+        return new CompileResult(dir, JavaCodeGenerator.MAIN_CLASS, null);
     }
 
-    private static void execute(FormModel model, Consumer<String> status, BiConsumer<String, String> error) {
+    /** Writes each Image component's bytes next to the classes so getResourceAsStream finds them. */
+    private static void writeImageResources(ProjectModel project, Path dir) throws Exception {
+        for (FormModel form : project.getForms()) {
+            for (var c : form.getComponents()) {
+                if (!c.getImageData().isEmpty()) {
+                    Files.write(dir.resolve(JavaCodeGenerator.imageResource(form, c)),
+                            java.util.Base64.getDecoder().decode(c.getImageData()));
+                }
+            }
+        }
+    }
+
+    private static void execute(ProjectModel project, Consumer<String> status, BiConsumer<String, String> error) {
         try {
             status.accept("Compiling…");
-            CompileResult result = compile(model);
+            CompileResult result = compile(project);
             if (!result.ok()) {
                 error.accept("Compilation failed", result.errorDetails());
                 status.accept("Compilation failed");

@@ -13,7 +13,7 @@ gradlew run
 ## What works (milestone 1)
 
 - **Palette → canvas drag and drop**: Button, Label, TextField, TextArea, CheckBox, Slider,
-  Panel, ComboBox, ListView, RadioButton, ProgressBar, Hyperlink
+  Panel, ComboBox, ListView, RadioButton, ProgressBar, Hyperlink, Image
 - **Visual designer**: click to select, drag to move (8 px grid snap), 8 resize handles,
   arrow keys to nudge (Shift = grid step), Delete to remove
 - **Properties inspector**: position/size, text, font size, text color, custom background;
@@ -64,10 +64,22 @@ gradlew run
   per-type properties (an "Items" list for ComboBox/ListView, a progress value) and
   events ("On select" for ComboBox/ListView, "On toggle"/"On click" for the rest).
 
-## Roadmap
+## What works (milestone 7)
 
-- ImageView with a proper asset pipeline (images bundled into packaged apps)
-- Multiple forms per project
+- **Image component with an asset pipeline**: choose an image file in the inspector; it is
+  stored Base64-inside the project file (projects stay a single portable `.dragifier` file)
+  and bundled as a jar resource into Run builds and packaged exes, loaded via
+  `getResourceAsStream`. Dashed placeholder until an image is chosen; "On click" event.
+
+## What works (milestone 8)
+
+- **Multiple forms per project**: the toolbar has a form switcher plus "+ Form",
+  "− Form" and "Set Main" (★ marks the startup form). Each form has a Name (its
+  generated class name, editable in the inspector) and compiles to its own
+  `Stage` subclass, so opening another form from an event handler is plain Java:
+  `new Form2().show();`. Old single-form project files load transparently.
+
+## Roadmap
 - Installer output (`.msi`/`.exe` setup) for machines with the WiX toolset
 - Syntax-highlighted code editor (RichTextFX)
 

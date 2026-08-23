@@ -5,15 +5,18 @@ import dev.dragifier.model.FormComponent;
 import javafx.geometry.Insets;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
-import javafx.scene.control.TextArea;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.util.StringConverter;
+import org.fxmisc.flowless.VirtualizedScrollPane;
+import org.fxmisc.richtext.CodeArea;
+import org.fxmisc.richtext.LineNumberFactory;
 
 /**
- * Bottom pane for editing a component's event handler code. The code body is
- * plain Java, inserted verbatim into the generated handler lambda.
+ * Bottom pane for editing a component's event handler code, with Java syntax
+ * highlighting and line numbers. The code body is plain Java, inserted
+ * verbatim into the generated handler lambda.
  */
 public class EventEditorPane extends VBox {
 
@@ -25,7 +28,7 @@ public class EventEditorPane extends VBox {
     private final Label header = new Label("Events");
     private final ComboBox<EventSpec> eventBox = new ComboBox<>();
     private final Label hint = new Label();
-    private final TextArea codeArea = new TextArea();
+    private final CodeArea codeArea = new CodeArea();
 
     public EventEditorPane() {
         setSpacing(6);
@@ -48,13 +51,22 @@ public class EventEditorPane extends VBox {
         HBox top = new HBox(10, header, eventBox, hint);
         top.setStyle("-fx-alignment: center-left;");
 
-        codeArea.setPromptText("Java code for the selected event, e.g.\nlabel1.setText(\"Clicked!\");");
-        codeArea.setStyle("-fx-font-family: 'Consolas', monospace; -fx-font-size: 12px;");
-        codeArea.setPrefRowCount(6);
-        VBox.setVgrow(codeArea, Priority.ALWAYS);
-        codeArea.textProperty().addListener((obs, was, text) -> storeCode(text));
+        codeArea.getStyleClass().add("code-area");
+        codeArea.setParagraphGraphicFactory(LineNumberFactory.get(codeArea));
+        Label placeholder = new Label(
+                "Java code for the selected event, e.g.  label1.setText(\"Clicked!\");");
+        placeholder.setStyle("-fx-text-fill: #a8a8a8; -fx-font-family: 'Consolas', monospace;");
+        codeArea.setPlaceholder(placeholder);
+        codeArea.textProperty().addListener((obs, was, text) -> {
+            storeCode(text);
+            codeArea.setStyleSpans(0, JavaSyntax.highlight(text));
+        });
 
-        getChildren().addAll(top, codeArea);
+        VirtualizedScrollPane<CodeArea> scroll = new VirtualizedScrollPane<>(codeArea);
+        scroll.setPrefHeight(150);
+        VBox.setVgrow(scroll, Priority.ALWAYS);
+
+        getChildren().addAll(top, scroll);
         showNone();
     }
 
@@ -72,8 +84,9 @@ public class EventEditorPane extends VBox {
         header.setText("Events — " + c.getId());
         eventBox.getItems().setAll(EventSpec.forType(c.getType()));
         eventBox.getSelectionModel().selectFirst();
-        eventBox.setDisable(false);
-        codeArea.setDisable(false);
+        boolean hasEvents = !eventBox.getItems().isEmpty();
+        eventBox.setDisable(!hasEvents);
+        codeArea.setDisable(!hasEvents);
         updating = false;
         loadCode();
     }
@@ -84,7 +97,7 @@ public class EventEditorPane extends VBox {
         header.setText("Events");
         eventBox.getItems().clear();
         hint.setText("");
-        codeArea.clear();
+        codeArea.replaceText("");
         eventBox.setDisable(true);
         codeArea.setDisable(true);
         updating = false;
@@ -102,10 +115,10 @@ public class EventEditorPane extends VBox {
         updating = true;
         if (spec == null) {
             hint.setText("");
-            codeArea.clear();
+            codeArea.replaceText("");
         } else {
             hint.setText(spec.hint());
-            codeArea.setText(current.getEvents().getOrDefault(spec.key(), ""));
+            codeArea.replaceText(current.getEvents().getOrDefault(spec.key(), ""));
         }
         updating = false;
     }

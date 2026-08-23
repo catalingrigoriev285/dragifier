@@ -43,6 +43,7 @@ public final class Renderer {
             case RADIO_BUTTON -> new RadioButton();
             case PROGRESS_BAR -> new ProgressBar(0);
             case HYPERLINK -> new Hyperlink();
+            case IMAGE_VIEW -> new ImageBox();
         };
         apply(node, c);
         return node;
@@ -64,6 +65,8 @@ public final class Renderer {
             ((ListView<String>) list).getItems().setAll(itemList(c));
         } else if (node instanceof ProgressBar bar) {
             bar.setProgress(c.getValue() / 100.0);
+        } else if (node instanceof ImageBox box) {
+            box.update(c);
         }
         node.setStyle(styleFor(c));
     }
@@ -84,6 +87,8 @@ public final class Renderer {
             style.append(" -fx-background-color: ").append(c.getBackground()).append(";");
         } else if (c.getType() == ComponentType.PANEL) {
             style.append(" -fx-background-color: #f4f4f4; -fx-border-color: #c0c0c0;");
+        } else if (c.getType() == ComponentType.IMAGE_VIEW && c.getImageData().isEmpty()) {
+            style.append(" -fx-border-color: #c0c0c0; -fx-border-style: dashed;");
         }
         return style.toString();
     }

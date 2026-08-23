@@ -3,6 +3,7 @@ package dev.dragifier;
 import dev.dragifier.model.ComponentType;
 import dev.dragifier.model.FormComponent;
 import dev.dragifier.model.FormModel;
+import dev.dragifier.model.ProjectModel;
 import dev.dragifier.packager.AppPackager;
 
 import java.nio.file.Files;
@@ -18,18 +19,19 @@ public final class PackageSmoke {
     private PackageSmoke() {}
 
     public static void main(String[] args) throws Exception {
-        FormModel model = new FormModel();
-        model.setTitle("Packaged Demo");
-        FormComponent label = model.create(ComponentType.LABEL, 24, 24);
+        ProjectModel project = ProjectModel.withDefaultForm();
+        FormModel form = project.effectiveMain();
+        form.setTitle("Packaged Demo");
+        FormComponent label = form.create(ComponentType.LABEL, 24, 24);
         label.setText("It works!");
-        FormComponent button = model.create(ComponentType.BUTTON, 24, 64);
+        FormComponent button = form.create(ComponentType.BUTTON, 24, 64);
         button.setText("Click");
         button.getEvents().put("onAction", "label1.setText(\"Clicked from a packaged app\");");
 
         Path dest = args.length > 0
                 ? Path.of(args[0])
                 : Files.createTempDirectory("dragifier-package-smoke");
-        Path exe = AppPackager.packageSync(model, dest, s -> System.out.println("  " + s));
+        Path exe = AppPackager.packageSync(project, dest, s -> System.out.println("  " + s));
 
         if (Files.exists(exe)) {
             System.out.println("PACKAGE SMOKE OK: " + exe + " (" + Files.size(exe) + " bytes)");

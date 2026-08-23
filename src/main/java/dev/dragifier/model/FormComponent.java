@@ -19,6 +19,8 @@ public class FormComponent {
     private String items = "";
     /** Percent 0–100, for ProgressBar. */
     private double value = 0;
+    /** Base64-encoded image bytes, for Image components. Kept in the project file. */
+    private String imageData = "";
     private Map<String, String> events = new LinkedHashMap<>();
 
     public String getId() { return id; }
@@ -56,6 +58,9 @@ public class FormComponent {
 
     public double getValue() { return value; }
     public void setValue(double value) { this.value = value; }
+
+    public String getImageData() { return imageData == null ? "" : imageData; }
+    public void setImageData(String imageData) { this.imageData = imageData; }
 
     /** Event key → Java handler body. Missing/blank entries mean "no handler". */
     public Map<String, String> getEvents() {

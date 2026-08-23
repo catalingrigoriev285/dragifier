@@ -13,7 +13,8 @@ public enum ComponentType {
     LIST_VIEW("ListView", "listView", 180, 120, ""),
     RADIO_BUTTON("RadioButton", "radioButton", 110, 24, "RadioButton"),
     PROGRESS_BAR("ProgressBar", "progressBar", 160, 20, ""),
-    HYPERLINK("Hyperlink", "hyperlink", 100, 24, "Hyperlink");
+    HYPERLINK("Hyperlink", "hyperlink", 100, 24, "Hyperlink"),
+    IMAGE_VIEW("Image", "image", 120, 90, "");
 
     public final String displayName;
     public final String idPrefix;

@@ -3,6 +3,7 @@ package dev.dragifier.ui;
 import dev.dragifier.codegen.JavaCodeGenerator;
 import dev.dragifier.io.ProjectIO;
 import dev.dragifier.model.FormModel;
+import dev.dragifier.model.ProjectModel;
 import dev.dragifier.packager.AppPackager;
 import dev.dragifier.runner.AppRunner;
 import dev.dragifier.undo.UndoManager;
@@ -38,15 +39,18 @@ import java.nio.file.Path;
 public class MainWindow {
 
     private final Stage stage;
-    private FormModel model = new FormModel();
+    private ProjectModel project = ProjectModel.withDefaultForm();
+    private FormModel model = project.effectiveMain();
     private Path currentFile;
     private boolean dirty;
+    private final javafx.scene.control.ComboBox<FormModel> formBox = new javafx.scene.control.ComboBox<>();
+    private boolean formBoxUpdating;
 
     private final DesignCanvas canvas = new DesignCanvas();
     private final InspectorPane inspector = new InspectorPane();
     private final EventEditorPane eventEditor = new EventEditorPane();
     private final ComponentTreePane tree = new ComponentTreePane();
-    private final UndoManager undoManager = new UndoManager(() -> ProjectIO.toJson(model));
+    private final UndoManager undoManager = new UndoManager(() -> ProjectIO.toJson(project));
     private final Label status = new Label("Ready");
 
     public MainWindow(Stage stage) {
@@ -84,12 +88,17 @@ public class MainWindow {
             canvas.refresh(c);
             markDirty();
         });
+        inspector.setNameInUse(name -> project.nameInUse(name, model));
         inspector.setOnFormEdited(() -> {
             canvas.applyFormSize();
+            if (project.findForm(project.getMainForm()) == null) {
+                project.setMainForm(model.getName());
+            }
+            refreshFormBox();
             markDirty();
         });
 
-        bindModel();
+        bindProject();
 
         BorderPane root = new BorderPane();
         root.setTop(new VBox(buildMenuBar(), buildToolBar()));
@@ -113,16 +122,30 @@ public class MainWindow {
         status.setPadding(new Insets(4, 10, 4, 10));
         root.setBottom(status);
 
-        stage.setScene(new Scene(root, 1100, 720));
+        Scene scene = new Scene(root, 1100, 720);
+        scene.getStylesheets().add(getClass().getResource("/code-highlight.css").toExternalForm());
+        stage.setScene(scene);
         updateTitle();
     }
 
-    private void bindModel() {
+    private void bindProject() {
+        refreshFormBox();
+        bindActiveForm();
+    }
+
+    private void bindActiveForm() {
         canvas.setModel(model);
         inspector.setModel(model);
         tree.setModel(model);
         inspector.showForm();
         eventEditor.showNone();
+    }
+
+    private void refreshFormBox() {
+        formBoxUpdating = true;
+        formBox.getItems().setAll(project.getForms());
+        formBox.getSelectionModel().select(model);
+        formBoxUpdating = false;
     }
 
     private MenuBar buildMenuBar() {
@@ -176,7 +199,56 @@ public class MainWindow {
         preview.setOnAction(e -> preview());
         Button export = new Button("Export Java");
         export.setOnAction(e -> exportCode());
-        return new ToolBar(run, preview, export);
+
+        formBox.setConverter(new javafx.util.StringConverter<>() {
+            @Override public String toString(FormModel f) {
+                return f == null ? "" : f.getName() + (f.getName().equals(project.getMainForm()) ? " ★" : "");
+            }
+            @Override public FormModel fromString(String s) {
+                return null;
+            }
+        });
+        formBox.setOnAction(e -> {
+            if (formBoxUpdating) {
+                return;
+            }
+            FormModel picked = formBox.getValue();
+            if (picked != null && picked != model) {
+                model = picked;
+                bindActiveForm();
+            }
+        });
+        Button addForm = new Button("+ Form");
+        addForm.setOnAction(e -> {
+            undoManager.checkpoint(null);
+            model = project.addForm();
+            bindProject();
+            markDirty();
+            status.setText("Added " + model.getName());
+        });
+        Button removeForm = new Button("− Form");
+        removeForm.setOnAction(e -> {
+            undoManager.checkpoint(null);
+            if (project.removeForm(model)) {
+                model = project.effectiveMain();
+                bindProject();
+                markDirty();
+            } else {
+                status.setText("A project needs at least one form");
+            }
+        });
+        Button setMain = new Button("Set Main");
+        setMain.setOnAction(e -> {
+            undoManager.checkpoint(null);
+            project.setMainForm(model.getName());
+            refreshFormBox();
+            markDirty();
+            status.setText(model.getName() + " is now the startup form");
+        });
+
+        return new ToolBar(run, preview, export,
+                new javafx.scene.control.Separator(),
+                new Label("Form:"), formBox, addForm, removeForm, setMain);
     }
 
     private MenuItem item(String text, String accelerator, Runnable action) {
@@ -189,11 +261,12 @@ public class MainWindow {
     }
 
     private void newProject() {
-        model = new FormModel();
+        project = ProjectModel.withDefaultForm();
+        model = project.effectiveMain();
         currentFile = null;
         dirty = false;
         undoManager.clear();
-        bindModel();
+        bindProject();
         updateTitle();
         status.setText("New project");
     }
@@ -205,11 +278,12 @@ public class MainWindow {
             return;
         }
         try {
-            model = ProjectIO.load(file.toPath());
+            project = ProjectIO.load(file.toPath());
+            model = project.effectiveMain();
             currentFile = file.toPath();
             dirty = false;
             undoManager.clear();
-            bindModel();
+            bindProject();
             updateTitle();
             status.setText("Opened " + file.getName());
         } catch (Exception ex) {
@@ -223,7 +297,7 @@ public class MainWindow {
             return;
         }
         try {
-            ProjectIO.save(model, currentFile);
+            ProjectIO.save(project, currentFile);
             dirty = false;
             updateTitle();
             status.setText("Saved " + currentFile.getFileName());
@@ -244,17 +318,18 @@ public class MainWindow {
     }
 
     private void exportCode() {
-        FileChooser chooser = new FileChooser();
-        chooser.setTitle("Export Java Code");
-        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Java source (*.java)", "*.java"));
-        chooser.setInitialFileName(JavaCodeGenerator.className(model) + ".java");
-        File file = chooser.showSaveDialog(stage);
-        if (file == null) {
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("Export Java Code (one file per form plus Main)");
+        File dir = chooser.showDialog(stage);
+        if (dir == null) {
             return;
         }
         try {
-            Files.writeString(file.toPath(), JavaCodeGenerator.generate(model), StandardCharsets.UTF_8);
-            status.setText("Exported " + file.getName());
+            var sources = JavaCodeGenerator.generateProject(project);
+            for (var entry : sources.entrySet()) {
+                Files.writeString(dir.toPath().resolve(entry.getKey()), entry.getValue(), StandardCharsets.UTF_8);
+            }
+            status.setText("Exported " + sources.size() + " files to " + dir.getName());
         } catch (IOException ex) {
             error("Could not export code", ex);
         }
@@ -271,11 +346,11 @@ public class MainWindow {
         if (dir == null) {
             return;
         }
-        AppPackager.packageApp(model, dir.toPath(), status::setText, this::errorText);
+        AppPackager.packageApp(project, dir.toPath(), status::setText, this::errorText);
     }
 
     private void run() {
-        AppRunner.run(model, status::setText, this::errorText);
+        AppRunner.run(project, status::setText, this::errorText);
     }
 
     private void undo() {
@@ -299,8 +374,11 @@ public class MainWindow {
     }
 
     private void restoreSnapshot(String json) {
-        model = ProjectIO.fromJson(json);
-        bindModel();
+        String activeName = model.getName();
+        project = ProjectIO.fromJson(json);
+        FormModel active = project.findForm(activeName);
+        model = active != null ? active : project.effectiveMain();
+        bindProject();
         markDirty();
     }
 

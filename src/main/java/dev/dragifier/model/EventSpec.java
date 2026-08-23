@@ -41,6 +41,8 @@ public record EventSpec(String key, String displayName, String hint, Kind kind, 
                     new EventSpec("onSelect", "On select",
                             "(obs, oldValue, newValue) -> { ... }", Kind.SELECTION_LISTENER, null));
             case PROGRESS_BAR -> List.of();
+            case IMAGE_VIEW -> List.of(
+                    new EventSpec("onMouseClicked", "On click", "(event) -> { ... }", Kind.SETTER, "setOnMouseClicked"));
         };
     }
 }

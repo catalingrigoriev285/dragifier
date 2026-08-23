@@ -45,11 +45,15 @@ public class InspectorPane extends VBox {
     private Label itemsLabel;
     private final TextField valueField = new TextField();
     private Label valueLabel;
+    private final javafx.scene.layout.HBox imageButtons = new javafx.scene.layout.HBox(6);
+    private Label imageLabel;
 
     private final GridPane formGrid = new GridPane();
+    private final TextField nameField = new TextField();
     private final TextField titleField = new TextField();
     private final TextField formWField = new TextField();
     private final TextField formHField = new TextField();
+    private java.util.function.Predicate<String> nameInUse = n -> false;
 
     public InspectorPane() {
         setSpacing(10);
@@ -74,12 +78,19 @@ public class InspectorPane extends VBox {
         itemsArea.setPrefWidth(110);
         itemsArea.setPromptText("One item per line");
         itemsLabel = addRow(componentGrid, row++, "Items", itemsArea);
-        valueLabel = addRow(componentGrid, row, "Value %", valueField);
+        valueLabel = addRow(componentGrid, row++, "Value %", valueField);
+        javafx.scene.control.Button chooseImage = new javafx.scene.control.Button("Choose…");
+        javafx.scene.control.Button clearImage = new javafx.scene.control.Button("Clear");
+        chooseImage.setOnAction(e -> pickImage());
+        clearImage.setOnAction(e -> applyComponent(() -> current.setImageData("")));
+        imageButtons.getChildren().addAll(chooseImage, clearImage);
+        imageLabel = addRow(componentGrid, row, "Image", imageButtons);
 
         setupGrid(formGrid);
-        addRow(formGrid, 0, "Title", titleField);
-        addRow(formGrid, 1, "Width", formWField);
-        addRow(formGrid, 2, "Height", formHField);
+        addRow(formGrid, 0, "Name", nameField);
+        addRow(formGrid, 1, "Title", titleField);
+        addRow(formGrid, 2, "Width", formWField);
+        addRow(formGrid, 3, "Height", formHField);
 
         getChildren().addAll(header, componentGrid, formGrid);
 
@@ -128,6 +139,10 @@ public class InspectorPane extends VBox {
         this.checkpoint = checkpoint;
     }
 
+    public void setNameInUse(java.util.function.Predicate<String> nameInUse) {
+        this.nameInUse = nameInUse;
+    }
+
     public void showComponent(FormComponent c) {
         current = c;
         updating = true;
@@ -149,6 +164,7 @@ public class InspectorPane extends VBox {
         boolean hasValue = c.getType() == ComponentType.PROGRESS_BAR;
         setRowVisible(valueLabel, valueField, hasValue);
         valueField.setText(num(c.getValue()));
+        setRowVisible(imageLabel, imageButtons, c.getType() == ComponentType.IMAGE_VIEW);
         componentGrid.setVisible(true);
         componentGrid.setManaged(true);
         formGrid.setVisible(false);
@@ -172,6 +188,7 @@ public class InspectorPane extends VBox {
         updating = true;
         header.setText("Form");
         if (model != null) {
+            nameField.setText(model.getName());
             titleField.setText(model.getTitle());
             formWField.setText(num(model.getWidth()));
             formHField.setText(num(model.getHeight()));
@@ -229,6 +246,28 @@ public class InspectorPane extends VBox {
     }
 
     private void wireFormEdits() {
+        onCommit(nameField, () -> {
+            if (model == null) {
+                return;
+            }
+            StringBuilder sb = new StringBuilder();
+            for (char ch : nameField.getText().trim().toCharArray()) {
+                if (Character.isLetterOrDigit(ch)) {
+                    sb.append(ch);
+                }
+            }
+            String sanitized = sb.toString();
+            if (sanitized.equals(model.getName())) {
+                nameField.setText(sanitized);
+                return;
+            }
+            if (sanitized.isEmpty() || Character.isDigit(sanitized.charAt(0)) || nameInUse.test(sanitized)) {
+                nameField.setText(model.getName());
+                return;
+            }
+            applyForm(() -> model.setName(sanitized));
+            nameField.setText(sanitized);
+        });
         onCommit(titleField, () -> {
             if (model != null && !titleField.getText().equals(model.getTitle())) {
                 applyForm(() -> model.setTitle(titleField.getText()));
@@ -259,6 +298,29 @@ public class InspectorPane extends VBox {
             return;
         }
         applyComponent(() -> setter.accept(current, v));
+    }
+
+    private void pickImage() {
+        if (current == null) {
+            return;
+        }
+        javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+        chooser.setTitle("Choose Image");
+        chooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter(
+                "Images (*.png, *.jpg, *.gif, *.bmp)", "*.png", "*.jpg", "*.jpeg", "*.gif", "*.bmp"));
+        java.io.File file = chooser.showOpenDialog(getScene().getWindow());
+        if (file == null) {
+            return;
+        }
+        try {
+            byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
+            String encoded = java.util.Base64.getEncoder().encodeToString(bytes);
+            applyComponent(() -> current.setImageData(encoded));
+        } catch (java.io.IOException ex) {
+            javafx.scene.control.Alert alert = new javafx.scene.control.Alert(
+                    javafx.scene.control.Alert.AlertType.ERROR, "Could not read image: " + ex.getMessage());
+            alert.showAndWait();
+        }
     }
 
     private void applyComponent(Runnable change) {

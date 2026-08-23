@@ -1,6 +1,7 @@
 package dev.dragifier.packager;
 
-import dev.dragifier.model.FormModel;
+import dev.dragifier.codegen.JavaCodeGenerator;
+import dev.dragifier.model.ProjectModel;
 import dev.dragifier.runner.AppRunner;
 import javafx.application.Platform;
 
@@ -27,11 +28,11 @@ public final class AppPackager {
     private AppPackager() {}
 
     /** Async wrapper for the UI; callbacks run on the JavaFX application thread. */
-    public static void packageApp(FormModel model, Path destDir,
+    public static void packageApp(ProjectModel project, Path destDir,
                                   Consumer<String> status, BiConsumer<String, String> error) {
         Thread thread = new Thread(() -> {
             try {
-                Path exe = packageSync(model, destDir,
+                Path exe = packageSync(project, destDir,
                         s -> Platform.runLater(() -> status.accept(s)));
                 Platform.runLater(() -> status.accept("Packaged: " + exe));
             } catch (Exception ex) {
@@ -45,8 +46,8 @@ public final class AppPackager {
         thread.start();
     }
 
-    /** Compiles, jars and jpackages the form. Returns the path of the launcher exe. */
-    public static Path packageSync(FormModel model, Path destDir, Consumer<String> status) throws Exception {
+    /** Compiles, jars and jpackages the project. Returns the path of the launcher exe. */
+    public static Path packageSync(ProjectModel project, Path destDir, Consumer<String> status) throws Exception {
         Path jpackage = Path.of(System.getProperty("java.home"), "bin",
                 System.getProperty("os.name", "").toLowerCase().contains("win") ? "jpackage.exe" : "jpackage");
         if (!Files.exists(jpackage)) {
@@ -54,23 +55,25 @@ public final class AppPackager {
         }
 
         status.accept("Compiling…");
-        AppRunner.CompileResult compiled = AppRunner.compile(model);
+        AppRunner.CompileResult compiled = AppRunner.compile(project);
         if (!compiled.ok()) {
             throw new IOException("Compilation failed:\n" + compiled.errorDetails());
         }
-        String cls = compiled.className();
+        // the launcher runs Main; the app itself is named after the main form
+        String appName = JavaCodeGenerator.className(project.effectiveMain());
+        String mainClass = compiled.className();
 
         status.accept("Creating jar…");
-        Path inputDir = createJar(compiled.dir(), cls);
+        Path inputDir = createJar(compiled.dir(), mainClass);
 
         status.accept("Packaging with jpackage (this takes a minute)…");
         List<String> cmd = new ArrayList<>(List.of(
                 jpackage.toString(),
                 "--type", "app-image",
-                "--name", cls,
+                "--name", appName,
                 "--input", inputDir.toString(),
                 "--main-jar", "app.jar",
-                "--main-class", cls,
+                "--main-class", mainClass,
                 "--dest", destDir.toString(),
                 "--java-options", "--enable-native-access=javafx.graphics"));
         String modulePath = AppRunner.javafxModulePath();
@@ -83,7 +86,7 @@ public final class AppPackager {
         if (exit != 0) {
             throw new IOException("jpackage exited with code " + exit + ":\n" + output);
         }
-        return destDir.resolve(cls).resolve(cls + ".exe");
+        return destDir.resolve(appName).resolve(appName + ".exe");
     }
 
     /** Jars the compiled classes into {@code <classesDir>/jar-input/app.jar} and returns the input dir. */
@@ -96,7 +99,8 @@ public final class AppPackager {
         try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jar), manifest);
              Stream<Path> files = Files.walk(classesDir)) {
             for (Path p : (Iterable<Path>) files::iterator) {
-                if (Files.isRegularFile(p) && p.toString().endsWith(".class")) {
+                if (Files.isRegularFile(p)
+                        && (p.toString().endsWith(".class") || p.toString().endsWith(".img"))) {
                     out.putNextEntry(new ZipEntry(classesDir.relativize(p).toString().replace('\\', '/')));
                     out.write(Files.readAllBytes(p));
                     out.closeEntry();

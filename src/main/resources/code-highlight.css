@@ -1,0 +1,40 @@
+.code-area {
+    -fx-font-family: 'Consolas', 'Courier New', monospace;
+    -fx-font-size: 12px;
+    -fx-background-color: #fdfdfd;
+}
+
+.code-area .lineno {
+    -fx-font-family: 'Consolas', 'Courier New', monospace;
+    -fx-font-size: 11px;
+    -fx-background-color: #f0f0f0;
+    -fx-text-fill: #a0a0a0;
+}
+
+.code-area .keyword {
+    -fx-fill: #0033b3;
+    -fx-font-weight: bold;
+}
+
+.code-area .string {
+    -fx-fill: #067d17;
+}
+
+.code-area .comment {
+    -fx-fill: #8c8c8c;
+    -fx-font-style: italic;
+}
+
+.code-area .number {
+    -fx-fill: #1750eb;
+}
+
+.code-area .paren,
+.code-area .brace,
+.code-area .bracket {
+    -fx-fill: #444444;
+}
+
+.code-area .semicolon {
+    -fx-fill: #444444;
+}
