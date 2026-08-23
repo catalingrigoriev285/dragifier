@@ -117,6 +117,10 @@ public final class AppRunner {
     }
 
     /** The IDE's JavaFX jars: module path when present, else javafx entries from the classpath. */
+    public static String javafxModulePath() {
+        return modulePath();
+    }
+
     private static String modulePath() {
         String mp = System.getProperty("jdk.module.path");
         if (mp != null && !mp.isBlank()) {

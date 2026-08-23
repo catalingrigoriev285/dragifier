@@ -3,6 +3,7 @@ package dev.dragifier.ui;
 import dev.dragifier.codegen.JavaCodeGenerator;
 import dev.dragifier.io.ProjectIO;
 import dev.dragifier.model.FormModel;
+import dev.dragifier.packager.AppPackager;
 import dev.dragifier.runner.AppRunner;
 import dev.dragifier.undo.UndoManager;
 import javafx.geometry.Insets;
@@ -23,6 +24,7 @@ import javafx.scene.input.KeyCombination;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
@@ -144,7 +146,9 @@ public class MainWindow {
         project.getItems().addAll(
                 item("Run", "F5", this::run),
                 item("Quick Preview", "Shift+F5", this::preview),
-                item("Export Java Code…", "Shortcut+E", this::exportCode));
+                item("Export Java Code…", "Shortcut+E", this::exportCode),
+                new SeparatorMenuItem(),
+                item("Package App…", null, this::packageApp));
 
         return new MenuBar(file, edit, project);
     }
@@ -242,6 +246,16 @@ public class MainWindow {
 
     private void preview() {
         PreviewWindow.show(model, stage);
+    }
+
+    private void packageApp() {
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("Choose output folder for the packaged app");
+        File dir = chooser.showDialog(stage);
+        if (dir == null) {
+            return;
+        }
+        AppPackager.packageApp(model, dir.toPath(), status::setText, this::errorText);
     }
 
     private void run() {

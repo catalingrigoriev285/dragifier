@@ -41,6 +41,13 @@ gradlew run
 - **Component tree**: every component listed under the palette; selection syncs both ways
   with the canvas.
 
+## What works (milestone 4)
+
+- **Package App…** (Project menu): compiles your form and runs `jpackage` to produce a
+  self-contained Windows app — a folder with `YourApp.exe` and a bundled Java+JavaFX
+  runtime, runnable on machines with no Java installed.
+- `gradlew packageSmoke` — headless check of the full compile → jar → jpackage pipeline
+
 ## Roadmap
 
 - Multi-select and alignment guides

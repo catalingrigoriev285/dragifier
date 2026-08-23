@@ -36,3 +36,13 @@ tasks.register<JavaExec>("smoke") {
     classpath = sourceSets["main"].runtimeClasspath
     mainClass = "dev.dragifier.CodegenSmoke"
 }
+
+tasks.register<JavaExec>("packageSmoke") {
+    group = "verification"
+    description = "Headless check of the jpackage pipeline (pass -PpackageDest=<dir> to keep the output)"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass = "dev.dragifier.PackageSmoke"
+    if (project.hasProperty("packageDest")) {
+        args(project.property("packageDest").toString())
+    }
+}
