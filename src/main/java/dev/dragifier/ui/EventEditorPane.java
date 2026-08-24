@@ -31,7 +31,7 @@ public class EventEditorPane extends VBox {
     private final ComboBox<EventSpec> eventBox = new ComboBox<>();
     private final Label hint = new Label();
     private final CodeArea codeArea = new CodeArea();
-    private static final int DEFAULT_FONT_SIZE = 14;
+    private static final int DEFAULT_FONT_SIZE = 12;
     private static final int MIN_FONT_SIZE = 8;
     private static final int MAX_FONT_SIZE = 40;
     private static final java.util.prefs.Preferences PREFS =
@@ -84,7 +84,7 @@ public class EventEditorPane extends VBox {
         codeArea.setPlaceholder(placeholder);
         codeArea.textProperty().addListener((obs, was, text) -> {
             storeCode(text);
-            codeArea.setStyleSpans(0, JavaSyntax.highlight(text));
+            rehighlight();
             if (completionPopup.isShowing()) {
                 javafx.application.Platform.runLater(this::openCompletion);
             }
@@ -377,6 +377,16 @@ public class EventEditorPane extends VBox {
             codeArea.replaceText(currentEvents.getOrDefault(spec.key(), ""));
         }
         updating = false;
+        // replaceText() with unchanged content resets the style spans without
+        // firing the text listener, so always re-apply highlighting after a load
+        rehighlight();
+    }
+
+    private void rehighlight() {
+        String text = codeArea.getText();
+        if (!text.isEmpty()) {
+            codeArea.setStyleSpans(0, JavaSyntax.highlight(text));
+        }
     }
 
     private void storeCode(String text) {

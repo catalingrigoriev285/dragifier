@@ -1,10 +1,15 @@
 .code-area {
     -fx-font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
-    -fx-font-size: 14px; /* overridden at runtime by the editor's inline style (Ctrl+wheel zoom) */
+    -fx-font-size: 12px; /* overridden at runtime by the editor's inline style (Ctrl+wheel zoom) */
     -fx-background-color: -color-bg-default;
 }
 
 .code-area .text {
+    /* RichTextFX's own stylesheet forces 'monospace' on .code-area, which beats the
+       inherited family above — so pin the family on the text nodes themselves.
+       Consolas first: Cascadia Code is a variable font and JavaFX renders its
+       synthesized Bold face with wrong glyphs (keywords came out as "ǐňţ"). */
+    -fx-font-family: 'Consolas', 'Cascadia Code', 'Courier New', monospace;
     -fx-fill: -color-fg-default;
 }
 
