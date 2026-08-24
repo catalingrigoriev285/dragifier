@@ -15,6 +15,7 @@ import dev.dragifier.undo.UndoManager;
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
+import javafx.geometry.Pos;
 import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.Scene;
@@ -91,6 +92,11 @@ public class MainWindow {
     private final BorderPane root = new BorderPane();
     private WelcomePane welcomePane;
     private SplitPane designerSplit;
+    private SplitPane centerSplit;
+    private Node editorArea;
+    private final Button maximizeBottom = new Button(null, new FontIcon(Feather.MAXIMIZE_2));
+    private boolean bottomMaximized;
+    private double savedCenterDivider = 0.72;
 
     public MainWindow(Stage stage) {
         this.stage = stage;
@@ -221,8 +227,9 @@ public class MainWindow {
         // tabs hold no content (the canvas below is the editor), so their computed
         // min height is ~0 — pin it so the tab strip can never be squeezed away
         formTabs.setMinHeight(Region.USE_PREF_SIZE);
-        VBox editorArea = new VBox(formTabs, scroll);
+        VBox editor = new VBox(formTabs, scroll);
         VBox.setVgrow(scroll, Priority.ALWAYS);
+        editorArea = editor;
 
         Tab eventsTab = new Tab("Events", eventEditor);
         eventsTab.setClosable(false);
@@ -232,10 +239,38 @@ public class MainWindow {
         consoleTab.setGraphic(new FontIcon(Feather.TERMINAL));
         bottomTabs.getTabs().addAll(eventsTab, consoleTab);
 
-        SplitPane center = new SplitPane(editorArea, bottomTabs);
-        center.setOrientation(Orientation.VERTICAL);
-        center.setDividerPositions(0.72);
-        return center;
+        // maximize/restore toggle overlaid at the right end of the bottom tab strip
+        maximizeBottom.getStyleClass().addAll("flat", "button-icon", "small", "bottom-max-button");
+        maximizeBottom.setTooltip(new Tooltip("Maximize code editor (Shortcut+Shift+M)"));
+        maximizeBottom.setFocusTraversable(false);
+        maximizeBottom.setOnAction(e -> toggleBottomMaximized());
+        StackPane bottomHolder = new StackPane(bottomTabs, maximizeBottom);
+        StackPane.setAlignment(maximizeBottom, Pos.TOP_RIGHT);
+        StackPane.setMargin(maximizeBottom, new Insets(3, 6, 0, 0));
+
+        centerSplit = new SplitPane(editorArea, bottomHolder);
+        centerSplit.setOrientation(Orientation.VERTICAL);
+        centerSplit.setDividerPositions(savedCenterDivider);
+        return centerSplit;
+    }
+
+    /** Toggles the bottom Events/Console pane between docked and full-height (canvas hidden). */
+    private void toggleBottomMaximized() {
+        if (bottomMaximized) {
+            centerSplit.getItems().add(0, editorArea);
+            centerSplit.setDividerPositions(savedCenterDivider);
+            maximizeBottom.setGraphic(new FontIcon(Feather.MAXIMIZE_2));
+            maximizeBottom.setTooltip(new Tooltip("Maximize code editor (Shortcut+Shift+M)"));
+        } else {
+            double[] positions = centerSplit.getDividerPositions();
+            if (positions.length > 0) {
+                savedCenterDivider = positions[0];
+            }
+            centerSplit.getItems().remove(editorArea);
+            maximizeBottom.setGraphic(new FontIcon(Feather.MINIMIZE_2));
+            maximizeBottom.setTooltip(new Tooltip("Restore designer (Shortcut+Shift+M)"));
+        }
+        bottomMaximized = !bottomMaximized;
     }
 
     private Node buildLeftPanel() {
@@ -300,7 +335,9 @@ public class MainWindow {
         Menu view = new Menu("View");
         CheckMenuItem darkItem = new CheckMenuItem("Dark Theme");
         darkItem.setOnAction(e -> setDarkTheme(darkItem.isSelected()));
-        view.getItems().add(darkItem);
+        view.getItems().addAll(darkItem,
+                new SeparatorMenuItem(),
+                item("Maximize / Restore Code Editor", "Shortcut+Shift+M", this::toggleBottomMaximized));
 
         Menu arrange = new Menu("Arrange");
         arrange.getItems().addAll(

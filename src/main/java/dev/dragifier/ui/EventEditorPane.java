@@ -31,6 +31,12 @@ public class EventEditorPane extends VBox {
     private final ComboBox<EventSpec> eventBox = new ComboBox<>();
     private final Label hint = new Label();
     private final CodeArea codeArea = new CodeArea();
+    private static final int DEFAULT_FONT_SIZE = 14;
+    private static final int MIN_FONT_SIZE = 8;
+    private static final int MAX_FONT_SIZE = 40;
+    private static final java.util.prefs.Preferences PREFS =
+            java.util.prefs.Preferences.userNodeForPackage(EventEditorPane.class);
+    private int fontSize = PREFS.getInt("editorFontSize", DEFAULT_FONT_SIZE);
     private final javafx.scene.control.MenuButton insertMenu = new javafx.scene.control.MenuButton("Insert");
     private java.util.function.Supplier<java.util.List<String>> formNames = java.util.List::of;
     private java.util.function.Supplier<FormModel> contextForm = () -> null;
@@ -63,6 +69,15 @@ public class EventEditorPane extends VBox {
 
         codeArea.getStyleClass().add("code-area");
         codeArea.setParagraphGraphicFactory(LineNumberFactory.get(codeArea));
+        applyFontSize();
+        // Ctrl + mouse wheel zooms the editor font (line numbers scale via em units in CSS)
+        codeArea.addEventFilter(javafx.scene.input.ScrollEvent.SCROLL, e -> {
+            if (!e.isShortcutDown() || e.getDeltaY() == 0) {
+                return;
+            }
+            setFontSize(fontSize + (e.getDeltaY() > 0 ? 1 : -1));
+            e.consume();
+        });
         Label placeholder = new Label(
                 "Java code for the selected event, e.g.  label1.setText(\"Clicked!\");");
         placeholder.getStyleClass().add("mono-hint");
@@ -82,6 +97,25 @@ public class EventEditorPane extends VBox {
 
         getChildren().addAll(top, scroll);
         showNone();
+    }
+
+    /** Sets the code editor font size in px (clamped) and remembers it across sessions. */
+    public void setFontSize(int size) {
+        int clamped = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, size));
+        if (clamped == fontSize) {
+            return;
+        }
+        fontSize = clamped;
+        PREFS.putInt("editorFontSize", fontSize);
+        applyFontSize();
+    }
+
+    public int getFontSize() {
+        return fontSize;
+    }
+
+    private void applyFontSize() {
+        codeArea.setStyle("-fx-font-size: " + fontSize + "px;");
     }
 
     public void setOnEdited(Runnable onEdited) {

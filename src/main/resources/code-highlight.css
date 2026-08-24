@@ -1,6 +1,6 @@
 .code-area {
     -fx-font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
-    -fx-font-size: 12px;
+    -fx-font-size: 14px; /* overridden at runtime by the editor's inline style (Ctrl+wheel zoom) */
     -fx-background-color: -color-bg-default;
 }
 
@@ -14,7 +14,7 @@
 
 .code-area .lineno {
     -fx-font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
-    -fx-font-size: 11px;
+    -fx-font-size: 0.9em; /* relative, so it follows the editor zoom */
     -fx-background-color: -color-bg-subtle;
     -fx-text-fill: -color-fg-subtle;
 }

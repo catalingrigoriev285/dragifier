@@ -128,3 +128,12 @@
     -fx-background-color: -color-accent-subtle;
     -fx-cursor: hand;
 }
+
+/* maximize/restore toggle overlaid on the bottom Events/Console tab strip */
+.bottom-max-button {
+    -fx-padding: 2 6 2 6;
+    -fx-background-radius: 4;
+}
+.bottom-max-button .ikonli-font-icon {
+    -fx-icon-size: 14;
+}
