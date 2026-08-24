@@ -38,6 +38,13 @@ public final class CompletionCatalog {
                     "getEngine().load(\"https://\")", "getEngine().reload()", "getEngine().getLocation()");
             case MEDIA_PLAYER -> List.of(
                     "getMediaPlayer().play()", "getMediaPlayer().pause()", "getMediaPlayer().stop()");
+            case GROUP_BOX -> List.of("setText(\"\")", "getText()", "setExpanded(true)", "getContent()");
+            case SCROLL_PANE -> List.of("setVvalue(0)", "setHvalue(0)", "getContent()");
+            case TAB_PANE -> List.of(
+                    "getSelectionModel().select(0)", "getSelectionModel().getSelectedIndex()",
+                    "getTabs().size()");
+            case SPLIT_PANE -> List.of("setDividerPositions(0.5)", "getItems()");
+            case STACK_PANEL, GRID_PANE, DOCK_PANEL -> List.of("getChildren()");
         });
         if (type != ComponentType.TIMER) {
             entries.addAll(COMMON);

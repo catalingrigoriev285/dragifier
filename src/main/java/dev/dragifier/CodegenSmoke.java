@@ -91,6 +91,77 @@ public final class CodegenSmoke {
         anchored.setAnchorRight(true);
         anchored.setAnchorBottom(true);
 
+        // nested containers: children are created with (parent, slot) and use content-relative coordinates
+        FormComponent nestedButton = form.create(ComponentType.BUTTON, 10, 10, panel, "");
+        nestedButton.setText("In panel");
+        FormComponent group = form.create(ComponentType.GROUP_BOX, 700, 24);
+        group.setText("Settings");
+        FormComponent groupField = form.create(ComponentType.TEXT_FIELD, 10, 10, group, "");
+        groupField.setAnchorRight(true);
+        FormComponent innerPanel = form.create(ComponentType.PANEL, 10, 50, group, "");
+        innerPanel.setWidth(180);
+        innerPanel.setHeight(60);
+        FormComponent deepLink = form.create(ComponentType.HYPERLINK, 4, 4, innerPanel, "");
+        deepLink.getEvents().put("onAction", "textField2.setText(\"deep\");");
+        FormComponent scroll = form.create(ComponentType.SCROLL_PANE, 700, 200);
+        FormComponent bigLabel = form.create(ComponentType.LABEL, 10, 10, scroll, "");
+        bigLabel.setWidth(400);
+        bigLabel.setHeight(300);
+        FormComponent tabs = form.create(ComponentType.TAB_PANE, 700, 380);
+        tabs.setItems("General\nAdvanced \"quoted\"");
+        form.create(ComponentType.CHECK_BOX, 10, 10, tabs, "0");
+        form.create(ComponentType.SLIDER, 10, 10, tabs, "1");
+        tabs.getEvents().put("onTabChange", "label1.setText(newValue.getText());");
+        FormComponent split = form.create(ComponentType.SPLIT_PANE, 1000, 24);
+        split.setOrientation("VERTICAL");
+        split.setPanes(3);
+        split.setDividers("0.3, 0.6");
+        form.create(ComponentType.LABEL, 4, 4, split, "0");
+        FormComponent splitArea = form.create(ComponentType.TEXT_AREA, 4, 4, split, "2");
+        splitArea.setAnchorRight(true);
+        splitArea.setAnchorBottom(true);
+
+        // auto-layout containers: x/y are ignored, the container lays children out
+        FormComponent stack = form.create(ComponentType.STACK_PANEL, 1000, 220);
+        for (int i = 0; i < 3; i++) {
+            form.create(ComponentType.BUTTON, 0, 0, stack, "").setText("Stack " + i);
+        }
+        FormComponent hstack = form.create(ComponentType.STACK_PANEL, 1000, 400);
+        hstack.setOrientation("HORIZONTAL");
+        hstack.setSpacing(10);
+        form.create(ComponentType.LABEL, 0, 0, hstack, "");
+        form.create(ComponentType.TEXT_FIELD, 0, 0, hstack, "");
+        FormComponent grid = form.create(ComponentType.GRID_PANE, 1300, 24);
+        grid.setGridColumns(3);
+        grid.setGridRows(2);
+        form.create(ComponentType.LABEL, 0, 0, grid, "0,0");
+        form.create(ComponentType.BUTTON, 0, 0, grid, "1,0");
+        form.create(ComponentType.CHECK_BOX, 0, 0, grid, "0,1");
+        form.create(ComponentType.IMAGE_VIEW, 0, 0, grid, "2,1");
+        form.create(ComponentType.PROGRESS_BAR, 0, 0, grid, "9,9"); // out of range → clamped
+        FormComponent dock = form.create(ComponentType.DOCK_PANEL, 1300, 220);
+        for (String region : dev.dragifier.model.ContainerGeometry.DOCK_REGIONS) {
+            form.create(ComponentType.LABEL, 0, 0, dock, region).setText(region);
+        }
+        FormComponent dockedPanel = form.create(ComponentType.PANEL, 0, 0, dock, "bogus"); // → CENTER
+        form.create(ComponentType.BUTTON, 5, 5, dockedPanel, "");
+
+        // Delphi-style docking: a toolbar strip on top, a sidebar left, an editor filling the rest
+        FormComponent shell = form.create(ComponentType.PANEL, 1600, 24);
+        shell.setWidth(400);
+        shell.setHeight(300);
+        // docking is sequential in z-order: top and bottom strips first, then the sidebar, then the fill
+        FormComponent toolbar = form.create(ComponentType.PANEL, 0, 0, shell, "");
+        toolbar.setHeight(30);
+        toolbar.setDock(dev.dragifier.model.Dock.TOP);
+        FormComponent statusBar = form.create(ComponentType.LABEL, 0, 0, shell, "");
+        statusBar.setDock(dev.dragifier.model.Dock.BOTTOM);
+        FormComponent sidebar = form.create(ComponentType.LIST_VIEW, 0, 0, shell, "");
+        sidebar.setWidth(100);
+        sidebar.setDock(dev.dragifier.model.Dock.LEFT);
+        FormComponent editor = form.create(ComponentType.TEXT_AREA, 0, 0, shell, "");
+        editor.setDock(dev.dragifier.model.Dock.FILL);
+
         // second form, opened from the first with plain Java
         FormModel second = project.addForm();
         second.setTitle("Second Form");
@@ -134,6 +205,8 @@ public final class CodegenSmoke {
         checkUndoRedo(project, label);
         checkRename(project, form, button);
         checkSourceMap(project, button);
+        checkNesting(form, group);
+        checkDocking(form, shell, toolbar, sidebar, editor, statusBar);
 
         for (var template : dev.dragifier.model.Templates.all()) {
             AppRunner.CompileResult tr = AppRunner.compile(template.factory().get());
@@ -192,6 +265,91 @@ public final class CodegenSmoke {
             System.exit(1);
         }
         System.out.println("SMOKE OK: compile errors map back to the exact event line.");
+    }
+
+    private static void fail(String message) {
+        System.err.println("SMOKE FAILED: " + message);
+        System.exit(1);
+    }
+
+    /** Hierarchy invariants: subtree duplicate/remove, rename of a container, reparent guard, z-order, old JSON. */
+    private static void checkNesting(FormModel form, FormComponent group) {
+        int before = form.getComponents().size();
+        var original = form.subtree(group);
+        if (original.size() != 4) {
+            fail("expected group subtree of 4, got " + original.size());
+        }
+        FormComponent copy = form.duplicate(group);
+        var copied = form.subtree(copy);
+        if (copied.size() != original.size()) {
+            fail("duplicate did not copy the subtree (" + copied.size() + ")");
+        }
+        for (FormComponent d : copied) {
+            if (d != copy && !form.isAncestor(copy, d)) {
+                fail("copied descendant " + d.getId() + " is not under the copy");
+            }
+            if (original.contains(d)) {
+                fail("duplicate shares a component with the original");
+            }
+        }
+        if (form.getComponents().stream().map(FormComponent::getId).distinct().count() != form.getComponents().size()) {
+            fail("duplicate produced clashing ids");
+        }
+        if (!form.renameComponent(copy, "groupCopy")) {
+            fail("could not rename the copied group");
+        }
+        var kids = form.childrenOf(copy);
+        if (kids.isEmpty() || kids.stream().anyMatch(k -> !"groupCopy".equals(k.getParentId()))) {
+            fail("renaming a container did not update its children's parentId");
+        }
+        if (form.reparent(copy, kids.get(0), "")) {
+            fail("reparenting a container into its own child was accepted");
+        }
+        form.toFront(copy);
+        var top = form.childrenOf(null);
+        if (top.get(top.size() - 1) != copy) {
+            fail("toFront did not move the copy to the end of its sibling group");
+        }
+        if (form.childrenOf(copy).size() != kids.size()) {
+            fail("toFront lost the copy's children");
+        }
+        form.remove(copy);
+        if (form.getComponents().size() != before || form.findById("groupCopy") != null) {
+            fail("remove did not delete the whole subtree");
+        }
+        // a pre-nesting project file (no parentId/slot/dock keys) loads with form-level defaults
+        FormModel old = new com.google.gson.Gson().fromJson(
+                "{\"name\":\"Old\",\"components\":[{\"id\":\"button1\",\"type\":\"BUTTON\","
+                + "\"x\":1,\"y\":2,\"width\":50,\"height\":20}]}", FormModel.class);
+        FormComponent legacy = old.getComponents().get(0);
+        if (legacy.getParentId() != null || legacy.getDock() != dev.dragifier.model.Dock.NONE
+                || !legacy.getSlot().isEmpty() || old.childrenOf(null).size() != 1) {
+            fail("legacy component did not get nesting defaults");
+        }
+        System.out.println("SMOKE OK: nesting invariants hold (subtree copy/remove, rename, reparent guard, legacy JSON).");
+    }
+
+    /** Sequential docking resolves to the expected rectangles (codegen already ran it while generating). */
+    private static void checkDocking(FormModel form, FormComponent shell, FormComponent toolbar,
+                                     FormComponent sidebar, FormComponent editor, FormComponent statusBar) {
+        dev.dragifier.model.DockLayout.applyTo(form, shell);
+        double w = shell.getWidth(), h = shell.getHeight();
+        expectRect(toolbar, 0, 0, w, 30);
+        expectRect(sidebar, 0, 30, 100, h - 30 - statusBar.getHeight());
+        expectRect(statusBar, 0, h - statusBar.getHeight(), w, statusBar.getHeight());
+        expectRect(editor, 100, 30, w - 100, h - 30 - statusBar.getHeight());
+        boolean[] anchors = dev.dragifier.model.DockLayout.anchors(editor);
+        if (!(anchors[0] && anchors[1] && anchors[2] && anchors[3])) {
+            fail("FILL dock should anchor all four sides");
+        }
+        System.out.println("SMOKE OK: docking resolves TOP/LEFT/FILL/BOTTOM to the expected rectangles.");
+    }
+
+    private static void expectRect(FormComponent c, double x, double y, double w, double h) {
+        if (c.getX() != x || c.getY() != y || c.getWidth() != w || c.getHeight() != h) {
+            fail(c.getId() + " docked to " + c.getDock() + " is at (" + c.getX() + "," + c.getY() + ","
+                    + c.getWidth() + "," + c.getHeight() + "), expected (" + x + "," + y + "," + w + "," + h + ")");
+        }
     }
 
     private static void checkUndoRedo(ProjectModel project, FormComponent label) {

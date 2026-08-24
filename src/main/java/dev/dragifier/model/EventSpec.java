@@ -56,6 +56,11 @@ public record EventSpec(String key, String displayName, String hint, Kind kind, 
                     new EventSpec("onSelect", "On select",
                             "(obs, oldValue, newValue) -> { ... }", Kind.SELECTION_LISTENER, null));
             case WEB_VIEW, MEDIA_PLAYER -> List.of();
+            case GROUP_BOX, SCROLL_PANE, SPLIT_PANE, STACK_PANEL, GRID_PANE, DOCK_PANEL -> List.of(
+                    new EventSpec("onMouseClicked", "On click", "(event) -> { ... }", Kind.SETTER, "setOnMouseClicked"));
+            case TAB_PANE -> List.of(
+                    new EventSpec("onTabChange", "On tab change",
+                            "(obs, oldValue, newValue) -> { ... }", Kind.SELECTION_LISTENER, null));
         };
     }
 }

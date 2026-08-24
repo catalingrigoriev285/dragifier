@@ -28,6 +28,13 @@ public final class Icons {
             case TABLE_VIEW -> Feather.COLUMNS;
             case WEB_VIEW -> Feather.GLOBE;
             case MEDIA_PLAYER -> Feather.PLAY_CIRCLE;
+            case GROUP_BOX -> Feather.SQUARE;
+            case SCROLL_PANE -> Feather.MAXIMIZE;
+            case TAB_PANE -> Feather.FOLDER;
+            case SPLIT_PANE -> Feather.SIDEBAR;
+            case STACK_PANEL -> Feather.LAYERS;
+            case GRID_PANE -> Feather.GRID;
+            case DOCK_PANEL -> Feather.BOX;
         };
         return new FontIcon(glyph);
     }

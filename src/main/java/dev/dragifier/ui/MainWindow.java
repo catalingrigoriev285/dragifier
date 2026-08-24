@@ -125,7 +125,20 @@ public class MainWindow {
         eventEditor.setFormNames(() -> project.getForms().stream().map(FormModel::getName).toList());
         eventEditor.setContextForm(() -> model);
         tree.setOnPick(canvas::select);
-        tree.setOnReorder(this::applyReorder);
+        tree.setOnMove(this::applyTreeMove);
+        canvas.setOnFormResized(() -> {
+            updateRulers();
+            if (canvas.getSelected() == null) {
+                inspector.showForm();
+            }
+            markDirty();
+        });
+        inspector.setOnComponentEdited(c -> {
+            canvas.refresh(c);
+            tree.refresh();
+            tree.select(c);
+            markDirty();
+        });
         canvas.setOnGeometryChanged(c -> {
             inspector.updateGeometry(c);
             markDirty();
@@ -557,11 +570,13 @@ public class MainWindow {
 
     // -------------------------------------------------------------- z-order
 
+    /** Orders the selected component's sibling group (top-level components when nothing is selected). */
     private void showOrderDialog() {
-        OrderDialog.show(stage, model.getComponents()).ifPresent(order -> {
+        FormComponent selected = canvas.getSelected();
+        var siblings = selected == null ? model.childrenOf(null) : model.siblingsOf(selected);
+        OrderDialog.show(stage, siblings).ifPresent(order -> {
             undoManager.checkpoint(null);
-            model.getComponents().clear();
-            model.getComponents().addAll(order);
+            model.reorderSiblings(order);
             canvas.rebuildPreservingSelection();
             tree.refresh();
             tree.select(canvas.getSelected());
@@ -569,18 +584,27 @@ public class MainWindow {
         });
     }
 
-    private void applyReorder(int from, int to) {
-        var components = model.getComponents();
-        if (from < 0 || from >= components.size()) {
-            return;
-        }
-        int target = Math.max(0, Math.min(components.size() - 1, to));
-        if (target == from) {
+    /** Component tree drag-and-drop: moves {@code moved} under {@code newParent} at {@code index} among its siblings. */
+    private void applyTreeMove(FormComponent moved, FormComponent newParent, int index) {
+        if (moved == newParent || (newParent != null && model.isAncestor(moved, newParent))) {
             return;
         }
         undoManager.checkpoint(null);
-        var moved = components.remove(from);
-        components.add(target, moved);
+        if (newParent != model.parentOf(moved)) {
+            String slot = newParent == null ? "" : switch (newParent.getType().kind) {
+                case TABS, SPLIT -> "0";
+                case DOCK -> "CENTER";
+                case GRID -> "0,0";
+                default -> "";
+            };
+            if (!model.reparent(moved, newParent, slot)) {
+                return;
+            }
+        }
+        var siblings = model.childrenOf(newParent);
+        siblings.remove(moved);
+        siblings.add(Math.max(0, Math.min(siblings.size(), index)), moved);
+        model.reorderSiblings(siblings);
         canvas.rebuildPreservingSelection();
         tree.refresh();
         tree.select(moved);

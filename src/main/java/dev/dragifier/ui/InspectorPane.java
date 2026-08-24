@@ -1,5 +1,6 @@
 package dev.dragifier.ui;
 
+import dev.dragifier.model.ContainerGeometry;
 import dev.dragifier.model.FormComponent;
 import dev.dragifier.model.FormModel;
 import javafx.geometry.Insets;
@@ -71,6 +72,37 @@ public class InspectorPane extends VBox {
     private final CheckBox anchorR = new CheckBox("R");
     private final CheckBox anchorB = new CheckBox("B");
 
+    // nesting: parent container and placement inside it
+    private final Label parentValue = new Label("Form");
+    private final TextField slotField = new TextField();
+    private Label slotLabel;
+    // container properties
+    private final javafx.scene.control.ComboBox<String> orientationBox = new javafx.scene.control.ComboBox<>();
+    private Label orientationLabel;
+    private final TextField panesField = new TextField();
+    private Label panesLabel;
+    private final TextField dividersField = new TextField();
+    private Label dividersLabel;
+    private final TextField spacingField = new TextField();
+    private Label spacingLabel;
+    private final TextField colsField = new TextField();
+    private Label colsLabel;
+    private final TextField rowsField = new TextField();
+    private Label rowsLabel;
+    // placement inside auto-layout parents
+    private final TextField cellColField = new TextField();
+    private Label cellColLabel;
+    private final TextField cellRowField = new TextField();
+    private Label cellRowLabel;
+    private final javafx.scene.control.ComboBox<String> regionBox = new javafx.scene.control.ComboBox<>();
+    private Label regionLabel;
+    private final javafx.scene.control.ComboBox<dev.dragifier.model.Dock> dockBox = new javafx.scene.control.ComboBox<>();
+    private Label dockLabel;
+    private Label xLabel;
+    private Label yLabel;
+    private Label anchorsLabel;
+    private final javafx.scene.layout.HBox anchorsRow = new javafx.scene.layout.HBox(8, anchorL, anchorT, anchorR, anchorB);
+
     private final GridPane formGrid = new GridPane();
     private final CheckBox resizableBox = new CheckBox("Resizable window");
     private final javafx.scene.control.TitledPane formSection = new javafx.scene.control.TitledPane("Form", formGrid);
@@ -91,12 +123,20 @@ public class InspectorPane extends VBox {
         setupGrid(layoutGrid);
         int row = 0;
         addRow(layoutGrid, row++, "Id", idField);
-        addRow(layoutGrid, row++, "X", xField);
-        addRow(layoutGrid, row++, "Y", yField);
+        parentValue.getStyleClass().add("hint-text");
+        addRow(layoutGrid, row++, "Parent", parentValue);
+        slotLabel = addRow(layoutGrid, row++, "Tab #", slotField);
+        cellColLabel = addRow(layoutGrid, row++, "Column", cellColField);
+        cellRowLabel = addRow(layoutGrid, row++, "Row", cellRowField);
+        regionBox.getItems().addAll(ContainerGeometry.DOCK_REGIONS);
+        regionLabel = addRow(layoutGrid, row++, "Region", regionBox);
+        dockBox.getItems().addAll(dev.dragifier.model.Dock.values());
+        dockLabel = addRow(layoutGrid, row++, "Dock", dockBox);
+        xLabel = addRow(layoutGrid, row++, "X", xField);
+        yLabel = addRow(layoutGrid, row++, "Y", yField);
         addRow(layoutGrid, row++, "Width", wField);
         addRow(layoutGrid, row++, "Height", hField);
-        javafx.scene.layout.HBox anchors = new javafx.scene.layout.HBox(8, anchorL, anchorT, anchorR, anchorB);
-        addRow(layoutGrid, row, "Anchors", anchors);
+        anchorsLabel = addRow(layoutGrid, row, "Anchors", anchorsRow);
 
         setupGrid(appearanceGrid);
         row = 0;
@@ -116,6 +156,14 @@ public class InspectorPane extends VBox {
         itemsArea.setPrefWidth(110);
         itemsArea.setPromptText("One item per line");
         itemsLabel = addRow(behaviorGrid, row++, "Items", itemsArea);
+        orientationBox.getItems().addAll("Horizontal", "Vertical");
+        orientationLabel = addRow(behaviorGrid, row++, "Orientation", orientationBox);
+        panesLabel = addRow(behaviorGrid, row++, "Panes", panesField);
+        dividersField.setPromptText("e.g. 0.3, 0.7");
+        dividersLabel = addRow(behaviorGrid, row++, "Dividers", dividersField);
+        spacingLabel = addRow(behaviorGrid, row++, "Spacing", spacingField);
+        colsLabel = addRow(behaviorGrid, row++, "Columns", colsField);
+        rowsLabel = addRow(behaviorGrid, row++, "Rows", rowsField);
         columnsArea.setPrefRowCount(3);
         columnsArea.setPrefWidth(110);
         columnsArea.setPromptText("One column per line");
@@ -272,9 +320,61 @@ public class InspectorPane extends VBox {
         customBg.setSelected(hasBg);
         bgPicker.setDisable(!hasBg);
         bgPicker.setValue(hasBg ? parseColor(c.getBackground(), Color.WHITE) : Color.WHITE);
-        boolean hasItems = c.getType() == ComponentType.COMBO_BOX || c.getType() == ComponentType.LIST_VIEW;
+        FormComponent parent = model == null ? null : model.parentOf(c);
+        parentValue.setText(parent == null ? "Form" : parent.getId() + " (" + parent.getType().displayName + ")");
+        boolean slotted = parent != null && parent.getType().kind.hasSlots();
+        slotLabel.setText(parent != null && parent.getType() == ComponentType.TAB_PANE ? "Tab #" : "Pane #");
+        setRowVisible(slotLabel, slotField, slotted);
+        slotField.setText(slotted ? String.valueOf(ContainerGeometry.slotIndex(c, parent) + 1) : "");
+        boolean hasItems = c.getType() == ComponentType.COMBO_BOX || c.getType() == ComponentType.LIST_VIEW
+                || c.getType() == ComponentType.TAB_PANE;
+        itemsLabel.setText(c.getType() == ComponentType.TAB_PANE ? "Tabs" : "Items");
+        itemsArea.setPromptText(c.getType() == ComponentType.TAB_PANE ? "One tab title per line" : "One item per line");
         setRowVisible(itemsLabel, itemsArea, hasItems);
         itemsArea.setText(c.getItems());
+        boolean split = c.getType() == ComponentType.SPLIT_PANE;
+        boolean stack = c.getType() == ComponentType.STACK_PANEL;
+        boolean grid = c.getType() == ComponentType.GRID_PANE;
+        setRowVisible(orientationLabel, orientationBox, split || stack);
+        orientationBox.setValue("VERTICAL".equals(c.getOrientation()) ? "Vertical" : "Horizontal");
+        setRowVisible(panesLabel, panesField, split);
+        panesField.setText(String.valueOf(ContainerGeometry.paneCount(c)));
+        setRowVisible(dividersLabel, dividersField, split);
+        dividersField.setText(c.getDividers());
+        setRowVisible(spacingLabel, spacingField, stack || grid);
+        spacingField.setText(num(c.getSpacing()));
+        setRowVisible(colsLabel, colsField, grid);
+        colsField.setText(String.valueOf(ContainerGeometry.gridColumns(c)));
+        setRowVisible(rowsLabel, rowsField, grid);
+        rowsField.setText(String.valueOf(ContainerGeometry.gridRows(c)));
+        boolean inGrid = parent != null && parent.getType() == ComponentType.GRID_PANE;
+        boolean inDock = parent != null && parent.getType() == ComponentType.DOCK_PANEL;
+        boolean autoLaid = parent != null && parent.getType().kind.isAutoLayout();
+        setRowVisible(cellColLabel, cellColField, inGrid);
+        setRowVisible(cellRowLabel, cellRowField, inGrid);
+        if (inGrid) {
+            int[] cell = ContainerGeometry.gridCell(c, parent);
+            cellColField.setText(String.valueOf(cell[0] + 1));
+            cellRowField.setText(String.valueOf(cell[1] + 1));
+        }
+        setRowVisible(regionLabel, regionBox, inDock);
+        regionBox.setValue(inDock ? ContainerGeometry.dockRegion(c) : "CENTER");
+        // an auto-layout parent decides position and anchoring
+        setRowVisible(xLabel, xField, !autoLaid);
+        setRowVisible(yLabel, yField, !autoLaid);
+        setRowVisible(anchorsLabel, anchorsRow, !autoLaid);
+        setRowVisible(dockLabel, dockBox, !autoLaid);
+        dev.dragifier.model.Dock dock = c.getDock();
+        dockBox.setValue(dock);
+        // a docked component's rectangle comes from the dock, except its own thickness
+        boolean docked = !autoLaid && dock != dev.dragifier.model.Dock.NONE;
+        boolean horizontalDock = dock == dev.dragifier.model.Dock.LEFT || dock == dev.dragifier.model.Dock.RIGHT;
+        boolean verticalDock = dock == dev.dragifier.model.Dock.TOP || dock == dev.dragifier.model.Dock.BOTTOM;
+        xField.setDisable(docked);
+        yField.setDisable(docked);
+        wField.setDisable(docked && !horizontalDock);
+        hField.setDisable(docked && !verticalDock);
+        anchorsRow.setDisable(docked);
         setRowVisible(columnsLabel, columnsArea, c.getType() == ComponentType.TABLE_VIEW);
         columnsArea.setText(c.getColumns());
         setRowVisible(mediaLabel, mediaButtons, c.getType() == ComponentType.MEDIA_PLAYER);
@@ -378,6 +478,65 @@ public class InspectorPane extends VBox {
                 applyComponent(() -> current.setTooltip(tooltipField.getText()));
             }
         });
+        onCommit(slotField, () -> {
+            if (current == null || updating || model == null) {
+                return;
+            }
+            FormComponent parent = model.parentOf(current);
+            if (parent == null || !parent.getType().kind.hasSlots()) {
+                return;
+            }
+            int currentSlot = ContainerGeometry.slotIndex(current, parent);
+            Double v = parse(slotField.getText());
+            int idx = v == null ? currentSlot
+                    : (int) Math.max(0, Math.min(ContainerGeometry.slotCount(parent) - 1, v.intValue() - 1));
+            if (idx != currentSlot) {
+                String slot = String.valueOf(idx);
+                applyComponent(() -> current.setSlot(slot));
+            }
+            slotField.setText(String.valueOf(idx + 1));
+        });
+        orientationBox.setOnAction(e -> {
+            String value = "Vertical".equals(orientationBox.getValue()) ? "VERTICAL" : "HORIZONTAL";
+            if (current != null && !value.equals(current.getOrientation())) {
+                applyComponent(() -> current.setOrientation(value));
+            }
+        });
+        onCommit(panesField, () -> applyNumber(panesField, c -> ContainerGeometry.paneCount(c),
+                (c, v) -> c.setPanes((int) Math.max(2, Math.min(8, v)))));
+        onCommit(dividersField, () -> {
+            if (current != null && !dividersField.getText().equals(current.getDividers())) {
+                applyComponent(() -> current.setDividers(dividersField.getText()));
+            }
+        });
+        onCommit(spacingField, () -> applyNumber(spacingField, FormComponent::getSpacing,
+                (c, v) -> c.setSpacing(Math.max(0, v))));
+        onCommit(colsField, () -> applyNumber(colsField, c -> ContainerGeometry.gridColumns(c),
+                (c, v) -> c.setGridColumns((int) Math.max(1, Math.min(12, v)))));
+        onCommit(rowsField, () -> applyNumber(rowsField, c -> ContainerGeometry.gridRows(c),
+                (c, v) -> c.setGridRows((int) Math.max(1, Math.min(12, v)))));
+        dockBox.setOnAction(e -> {
+            dev.dragifier.model.Dock dock = dockBox.getValue();
+            if (current != null && dock != null && dock != current.getDock()) {
+                applyComponent(() -> current.setDock(dock));
+                if (current != null) {
+                    showComponent(current); // re-evaluate which geometry fields stay editable
+                }
+            }
+        });
+        onCommit(cellColField, () -> applyCell(0, cellColField));
+        onCommit(cellRowField, () -> applyCell(1, cellRowField));
+        regionBox.setOnAction(e -> {
+            String region = regionBox.getValue();
+            if (current == null || model == null || region == null) {
+                return;
+            }
+            FormComponent parent = model.parentOf(current);
+            if (parent != null && parent.getType() == ComponentType.DOCK_PANEL
+                    && !region.equals(ContainerGeometry.dockRegion(current))) {
+                applyComponent(() -> current.setSlot(region));
+            }
+        });
         disabledBox.setOnAction(e ->
                 applyComponent(() -> current.setDisabled(disabledBox.isSelected())));
         lockedBox.setOnAction(e ->
@@ -457,6 +616,27 @@ public class InspectorPane extends VBox {
         });
         resizableBox.setOnAction(e ->
                 applyForm(() -> model.setResizable(resizableBox.isSelected())));
+    }
+
+    /** Writes one axis (0 = column, 1 = row) of a Grid child's cell, 1-based in the UI. */
+    private void applyCell(int axis, TextField field) {
+        if (current == null || updating || model == null) {
+            return;
+        }
+        FormComponent parent = model.parentOf(current);
+        if (parent == null || parent.getType() != ComponentType.GRID_PANE) {
+            return;
+        }
+        int[] cell = ContainerGeometry.gridCell(current, parent);
+        Double v = parse(field.getText());
+        int max = (axis == 0 ? ContainerGeometry.gridColumns(parent) : ContainerGeometry.gridRows(parent)) - 1;
+        int value = v == null ? cell[axis] : (int) Math.max(0, Math.min(max, v.intValue() - 1));
+        if (value != cell[axis]) {
+            cell[axis] = value;
+            String slot = cell[0] + "," + cell[1];
+            applyComponent(() -> current.setSlot(slot));
+        }
+        field.setText(String.valueOf(value + 1));
     }
 
     private void applyNumber(TextField field,

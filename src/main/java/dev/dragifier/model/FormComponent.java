@@ -37,6 +37,26 @@ public class FormComponent {
     /** Base64 media bytes + original extension, for Media components. */
     private String mediaData = "";
     private String mediaFormat = "";
+    /** Id of the containing component, or null when placed directly on the form. */
+    private String parentId;
+    /**
+     * Placement inside the parent container: tab/pane index ("0"), grid cell
+     * ("col,row") or dock-panel region ("TOP"); empty for single-area containers.
+     */
+    private String slot = "";
+    /** Edge docking inside the parent's content area (absolute containers only). */
+    private Dock dock = Dock.NONE;
+    /** "VERTICAL" or "HORIZONTAL", for Splitter and StackPanel. */
+    private String orientation = "";
+    /** Gap between children, for StackPanel (spacing) and Grid (hgap/vgap). */
+    private double spacing = 0;
+    /** Grid dimensions (0 = default 2x2). */
+    private int gridColumns = 0;
+    private int gridRows = 0;
+    /** Number of panes of a Splitter (0 = default 2). */
+    private int panes = 0;
+    /** Comma-separated Splitter divider positions in 0..1. */
+    private String dividers = "";
     private Map<String, String> events = new LinkedHashMap<>();
 
     public String getId() { return id; }
@@ -110,6 +130,33 @@ public class FormComponent {
 
     public String getMediaFormat() { return mediaFormat == null ? "" : mediaFormat; }
     public void setMediaFormat(String mediaFormat) { this.mediaFormat = mediaFormat; }
+
+    public String getParentId() { return parentId == null || parentId.isEmpty() ? null : parentId; }
+    public void setParentId(String parentId) { this.parentId = parentId; }
+
+    public String getSlot() { return slot == null ? "" : slot; }
+    public void setSlot(String slot) { this.slot = slot == null ? "" : slot; }
+
+    public Dock getDock() { return dock == null ? Dock.NONE : dock; }
+    public void setDock(Dock dock) { this.dock = dock; }
+
+    public String getOrientation() { return orientation == null ? "" : orientation; }
+    public void setOrientation(String orientation) { this.orientation = orientation; }
+
+    public double getSpacing() { return spacing; }
+    public void setSpacing(double spacing) { this.spacing = spacing; }
+
+    public int getGridColumns() { return gridColumns; }
+    public void setGridColumns(int gridColumns) { this.gridColumns = gridColumns; }
+
+    public int getGridRows() { return gridRows; }
+    public void setGridRows(int gridRows) { this.gridRows = gridRows; }
+
+    public int getPanes() { return panes; }
+    public void setPanes(int panes) { this.panes = panes; }
+
+    public String getDividers() { return dividers == null ? "" : dividers; }
+    public void setDividers(String dividers) { this.dividers = dividers; }
 
     /** Event key → Java handler body. Missing/blank entries mean "no handler". */
     public Map<String, String> getEvents() {

@@ -2,6 +2,7 @@ package dev.dragifier.ui;
 
 import dev.dragifier.model.ComponentType;
 import javafx.geometry.Insets;
+import javafx.scene.Node;
 import javafx.scene.SnapshotParameters;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
@@ -10,8 +11,13 @@ import javafx.scene.input.TransferMode;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
-/** Palette of draggable component types. */
+import java.util.ArrayList;
+import java.util.List;
+
+/** Palette of draggable component types, grouped by category. */
 public class PalettePane extends VBox {
+
+    private record Section(Label header, List<Label> items) {}
 
     public PalettePane() {
         setSpacing(6);
@@ -28,17 +34,37 @@ public class PalettePane extends VBox {
         getChildren().add(filter);
 
         VBox items = new VBox(4);
-        for (ComponentType type : ComponentType.values()) {
-            Label item = makeItem(type);
-            items.getChildren().add(item);
+        List<Section> sections = new ArrayList<>();
+        for (ComponentType.Category category : ComponentType.Category.values()) {
+            Label header = new Label(switch (category) {
+                case BASIC -> "Basic";
+                case CONTAINER -> "Containers";
+                case OTHER -> "Other";
+            });
+            header.getStyleClass().add("palette-section");
+            List<Label> labels = new ArrayList<>();
+            for (ComponentType type : ComponentType.values()) {
+                if (type.category == category) {
+                    labels.add(makeItem(type));
+                }
+            }
+            if (labels.isEmpty()) {
+                continue;
+            }
+            items.getChildren().add(header);
+            items.getChildren().addAll(labels);
+            sections.add(new Section(header, labels));
         }
         filter.textProperty().addListener((obs, was, query) -> {
             String q = query == null ? "" : query.trim().toLowerCase();
-            for (javafx.scene.Node node : items.getChildren()) {
-                boolean match = q.isEmpty()
-                        || ((Label) node).getText().toLowerCase().contains(q);
-                node.setVisible(match);
-                node.setManaged(match);
+            for (Section section : sections) {
+                boolean any = false;
+                for (Label item : section.items()) {
+                    boolean match = q.isEmpty() || item.getText().toLowerCase().contains(q);
+                    show(item, match);
+                    any |= match;
+                }
+                show(section.header(), any);
             }
         });
         ScrollPane scroll = new ScrollPane(items);
@@ -47,10 +73,16 @@ public class PalettePane extends VBox {
         VBox.setVgrow(scroll, Priority.ALWAYS);
         getChildren().add(scroll);
 
-        Label hint = new Label("Drag onto the form");
+        Label hint = new Label("Drag onto the form or into a container");
         hint.getStyleClass().add("hint-text");
+        hint.setWrapText(true);
         hint.setPadding(new Insets(6, 0, 0, 0));
         getChildren().add(hint);
+    }
+
+    private static void show(Node node, boolean visible) {
+        node.setVisible(visible);
+        node.setManaged(visible);
     }
 
     private Label makeItem(ComponentType type) {
