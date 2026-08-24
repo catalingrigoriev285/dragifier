@@ -256,6 +256,16 @@ public class FormModel {
         c.setGridRows(src.getGridRows());
         c.setPanes(src.getPanes());
         c.setDividers(src.getDividers());
+        c.setFontFamily(src.getFontFamily());
+        c.setBold(src.isBold());
+        c.setItalic(src.isItalic());
+        c.setBorderColor(src.getBorderColor());
+        c.setBorderWidth(src.getBorderWidth());
+        c.setBorderRadius(src.getBorderRadius());
+        c.setPadding(src.getPadding());
+        c.setMargin(src.getMargin());
+        c.setVisible(src.isVisible());
+        c.setCursor(src.getCursor());
         c.getEvents().putAll(src.getEvents());
         return c;
     }

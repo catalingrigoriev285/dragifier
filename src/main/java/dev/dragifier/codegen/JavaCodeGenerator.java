@@ -2,6 +2,7 @@ package dev.dragifier.codegen;
 
 import dev.dragifier.model.ComponentType;
 import dev.dragifier.model.ContainerGeometry;
+import dev.dragifier.model.CssInsets;
 import dev.dragifier.model.DockLayout;
 import dev.dragifier.model.EventSpec;
 import dev.dragifier.model.FormComponent;
@@ -100,8 +101,10 @@ public final class JavaCodeGenerator {
         out.append("import javafx.animation.Timeline;\n");
         out.append("import javafx.beans.property.ReadOnlyStringWrapper;\n");
         out.append("import javafx.collections.ObservableList;\n");
+        out.append("import javafx.geometry.Insets;\n");
         out.append("import javafx.geometry.Orientation;\n");
         out.append("import javafx.geometry.Pos;\n");
+        out.append("import javafx.scene.Cursor;\n");
         out.append("import javafx.scene.Scene;\n");
         out.append("import javafx.scene.control.*;\n");
         out.append("import javafx.scene.image.Image;\n");
@@ -189,6 +192,26 @@ public final class JavaCodeGenerator {
         }
         if (c.isDisabled()) {
             out.append("        ").append(var).append(".setDisable(true);\n");
+        }
+        if (!c.isVisible()) {
+            out.append("        ").append(var).append(".setVisible(false);\n");
+        }
+        if (Renderer.cursorFor(c.getCursor()) != null && !"DEFAULT".equals(c.getCursor())) {
+            out.append("        ").append(var).append(".setCursor(Cursor.").append(c.getCursor()).append(");\n");
+        }
+        if (autoLaid) {
+            double[] m = CssInsets.parse(c.getMargin());
+            String host = switch (parent.getType().kind) {
+                case GRID -> "GridPane";
+                case DOCK -> "BorderPane";
+                case STACK -> javaTypeFor(parent);
+                default -> null;
+            };
+            if (m != null && host != null) {
+                out.append("        ").append(host).append(".setMargin(").append(var).append(", new Insets(")
+                   .append(dbl(m[0])).append(", ").append(dbl(m[1])).append(", ")
+                   .append(dbl(m[2])).append(", ").append(dbl(m[3])).append("));\n");
+            }
         }
         if (!c.getAlignment().isEmpty() && Renderer.supportsAlignment(c.getType())) {
             String pos = switch (c.getAlignment()) {

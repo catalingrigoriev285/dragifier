@@ -168,6 +168,23 @@ public final class CodegenSmoke {
         browser.setItems("txt\n*.log\n.md");
         browser.getEvents().put("onFileSelected", "label1.setText(file.getName());");
         browser.getEvents().put("onFileOpened", "UI.notify(\"Opened\", file.getAbsolutePath());");
+        // styling properties from the property inspector: font, border, padding, cursor, visibility, margin
+        FormComponent styled = form.create(ComponentType.BUTTON, 1900, 24);
+        styled.setText("Styled");
+        styled.setFontFamily("Consolas");
+        styled.setBold(true);
+        styled.setItalic(true);
+        styled.setBorderColor("#ff0000");
+        styled.setBorderWidth("2");
+        styled.setBorderRadius(6);
+        styled.setPadding("4 12");
+        styled.setCursor("HAND");
+        styled.setVisible(false);
+        styled.getEvents().put("onMouseEntered", "label1.setText(\"enter\");");
+        styled.getEvents().put("onMouseExited", "label1.setText(\"leave\");");
+        FormComponent spaced = form.create(ComponentType.LABEL, 0, 0, stack, "");
+        spaced.setText("with margin");
+        spaced.setMargin("8 0");
         FormComponent helpers = form.create(ComponentType.BUTTON, 1600, 560);
         helpers.setText("Helpers");
         helpers.getEvents().put("onAction",
@@ -236,6 +253,7 @@ public final class CodegenSmoke {
         checkNesting(form, group);
         checkDocking(form, shell, toolbar, sidebar, editor, statusBar);
         checkTemplatesLayout();
+        checkStyling(sources.get(JavaCodeGenerator.className(form) + ".java"), form, styled, spaced);
 
         for (var template : dev.dragifier.model.Templates.all()) {
             AppRunner.CompileResult tr = AppRunner.compile(template.factory().get());
@@ -334,6 +352,64 @@ public final class CodegenSmoke {
         System.out.println("SMOKE OK: runtime UI.eval/formatNumber behave.");
     }
 
+    /** New styling properties reach the generated code, the shared style string, and the property registry. */
+    private static void checkStyling(String formSource, FormModel form, FormComponent styled, FormComponent spaced) {
+        String style = dev.dragifier.ui.Renderer.styleFor(styled);
+        for (String expected : new String[]{"-fx-font-family: 'Consolas'", "-fx-font-weight: bold",
+                "-fx-font-style: italic", "-fx-border-color: #ff0000", "-fx-border-width: 2",
+                "-fx-border-radius: 6", "-fx-padding: 4 12 4 12"}) {
+            if (!style.contains(expected)) {
+                fail("styleFor is missing '" + expected + "': " + style);
+            }
+        }
+        for (String expected : new String[]{styled.getId() + ".setVisible(false);", styled.getId() + ".setCursor(Cursor.HAND);",
+                "VBox.setMargin(" + spaced.getId() + ", new Insets(8.0, 0.0, 8.0, 0.0));",
+                styled.getId() + ".setOnMouseEntered(event -> {", styled.getId() + ".setOnMouseExited(event -> {"}) {
+            if (!formSource.contains(expected)) {
+                fail("generated form is missing '" + expected + "'");
+            }
+        }
+        double[][] insets = {
+                dev.dragifier.model.CssInsets.parse("8"), {8, 8, 8, 8},
+                dev.dragifier.model.CssInsets.parse("4 8"), {4, 8, 4, 8},
+                dev.dragifier.model.CssInsets.parse("1 2 3 4"), {1, 2, 3, 4}};
+        for (int i = 0; i < insets.length; i += 2) {
+            if (!java.util.Arrays.equals(insets[i], insets[i + 1])) {
+                fail("CssInsets.parse mismatch: " + java.util.Arrays.toString(insets[i]));
+            }
+        }
+        if (dev.dragifier.model.CssInsets.parse("") != null || dev.dragifier.model.CssInsets.parse("a b") != null
+                || dev.dragifier.model.CssInsets.parse("1 2 3") != null || dev.dragifier.model.CssInsets.parse("-1") != null) {
+            fail("CssInsets.parse accepted an invalid value");
+        }
+        var specs = dev.dragifier.ui.ComponentProperties.forComponent(form, styled);
+        // only rows that apply are shown; a Button has no type-specific rows, so no "Button" category
+        var categories = specs.stream().filter(s -> s.applies().test(styled))
+                .map(dev.dragifier.ui.PropertySpec::category).distinct().toList();
+        var expectedOrder = java.util.List.of("General", "Size", "Position", "Font", "Background", "Border",
+                "Padding", "Behavior", "Events");
+        var gridCategories = dev.dragifier.ui.ComponentProperties.forComponent(form, spaced).stream()
+                .filter(s -> s.applies().test(spaced)).map(dev.dragifier.ui.PropertySpec::category).distinct().toList();
+        if (!gridCategories.contains("Margin") || gridCategories.contains("Position")) {
+            fail("StackPanel child categories are " + gridCategories);
+        }
+        if (!categories.equals(expectedOrder)) {
+            fail("Button property categories are " + categories + ", expected " + expectedOrder);
+        }
+        var eventKeys = specs.stream().filter(s -> s.category().equals("Events"))
+                .map(dev.dragifier.ui.PropertySpec::key).toList();
+        if (!eventKeys.containsAll(java.util.List.of("onAction", "onMouseEntered", "onMouseExited"))) {
+            fail("Button events rows are " + eventKeys);
+        }
+        boolean margin = dev.dragifier.ui.ComponentProperties.forComponent(form, spaced).stream()
+                .anyMatch(s -> s.key().equals("margin") && s.applies().test(spaced));
+        boolean noMargin = specs.stream().anyMatch(s -> s.key().equals("margin") && s.applies().test(styled));
+        if (!margin || noMargin) {
+            fail("Margin should apply only to auto-laid children");
+        }
+        System.out.println("SMOKE OK: styling properties render, generate and list correctly.");
+    }
+
     /** The Notepad template's docked layout resolves as designed. */
     private static void checkTemplatesLayout() {
         var notepad = dev.dragifier.model.Templates.all().stream()
@@ -404,7 +480,8 @@ public final class CodegenSmoke {
                 + "\"x\":1,\"y\":2,\"width\":50,\"height\":20}]}", FormModel.class);
         FormComponent legacy = old.getComponents().get(0);
         if (legacy.getParentId() != null || legacy.getDock() != dev.dragifier.model.Dock.NONE
-                || !legacy.getSlot().isEmpty() || old.childrenOf(null).size() != 1) {
+                || !legacy.getSlot().isEmpty() || old.childrenOf(null).size() != 1
+                || !legacy.isVisible() || !legacy.getPadding().isEmpty() || !legacy.getCursor().isEmpty()) {
             fail("legacy component did not get nesting defaults");
         }
         System.out.println("SMOKE OK: nesting invariants hold (subtree copy/remove, rename, reparent guard, legacy JSON).");

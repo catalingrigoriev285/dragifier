@@ -2,8 +2,11 @@ package dev.dragifier.ui;
 
 import dev.dragifier.model.ComponentType;
 import dev.dragifier.model.ContainerGeometry;
+import dev.dragifier.model.CssInsets;
 import dev.dragifier.model.FormComponent;
+import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
+import javafx.scene.Cursor;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
@@ -103,16 +106,19 @@ public final class Renderer {
      * DockPanel the named region. Mirrored by the code generator.
      */
     public static void placeChild(Region containerNode, FormComponent container, Node childNode, FormComponent child) {
+        Insets margin = insets(child.getMargin());
         switch (container.getType().kind) {
             case GRID -> {
                 int[] cell = ContainerGeometry.gridCell(child, container);
                 GridPane.setConstraints(childNode, cell[0], cell[1]);
                 GridPane.setHgrow(childNode, Priority.ALWAYS);
                 GridPane.setVgrow(childNode, Priority.ALWAYS);
+                GridPane.setMargin(childNode, margin);
                 ((GridPane) containerNode).getChildren().add(childNode);
             }
             case DOCK -> {
                 BorderPane border = (BorderPane) containerNode;
+                BorderPane.setMargin(childNode, margin);
                 switch (ContainerGeometry.dockRegion(child)) {
                     case "TOP" -> border.setTop(childNode);
                     case "LEFT" -> border.setLeft(childNode);
@@ -121,8 +127,38 @@ public final class Renderer {
                     default -> border.setCenter(childNode);
                 }
             }
-            default -> ((Pane) containerNode).getChildren().add(childNode);
+            default -> {
+                if (containerNode instanceof VBox) {
+                    VBox.setMargin(childNode, margin);
+                } else if (containerNode instanceof HBox) {
+                    HBox.setMargin(childNode, margin);
+                }
+                ((Pane) containerNode).getChildren().add(childNode);
+            }
         }
+    }
+
+    /** JavaFX insets for a CSS-style insets string, or null when unset/invalid. */
+    public static Insets insets(String value) {
+        double[] v = CssInsets.parse(value);
+        return v == null ? null : new Insets(v[0], v[1], v[2], v[3]);
+    }
+
+    /** Cursor names offered in the inspector (empty = default). */
+    public static final List<String> CURSORS = List.of("", "DEFAULT", "HAND", "TEXT", "CROSSHAIR", "MOVE", "WAIT", "NONE");
+
+    /** The JavaFX cursor for a model cursor name; null = inherit the default. */
+    public static Cursor cursorFor(String name) {
+        return switch (name == null ? "" : name) {
+            case "HAND" -> Cursor.HAND;
+            case "TEXT" -> Cursor.TEXT;
+            case "CROSSHAIR" -> Cursor.CROSSHAIR;
+            case "MOVE" -> Cursor.MOVE;
+            case "WAIT" -> Cursor.WAIT;
+            case "NONE" -> Cursor.NONE;
+            case "DEFAULT" -> Cursor.DEFAULT;
+            default -> null;
+        };
     }
 
     private static Label badge(org.kordamp.ikonli.feather.Feather glyph) {
@@ -180,6 +216,8 @@ public final class Renderer {
             textField.setAlignment(posFor(c));
         }
         node.setDisable(c.isDisabled());
+        node.setVisible(c.isVisible());
+        node.setCursor(cursorFor(c.getCursor()));
         applyTooltip(node, c.getTooltip());
         node.setStyle(styleFor(c));
     }
@@ -327,21 +365,47 @@ public final class Renderer {
     public static String styleFor(FormComponent c) {
         StringBuilder style = new StringBuilder();
         style.append("-fx-font-size: ").append(c.getFontSize()).append("px;");
+        if (!c.getFontFamily().isEmpty()) {
+            style.append(" -fx-font-family: '").append(c.getFontFamily().replace("'", "")).append("';");
+        }
+        if (c.isBold()) {
+            style.append(" -fx-font-weight: bold;");
+        }
+        if (c.isItalic()) {
+            style.append(" -fx-font-style: italic;");
+        }
         if (!c.getTextColor().isEmpty()) {
             style.append(" -fx-text-fill: ").append(c.getTextColor()).append(";");
         }
+        String padding = CssInsets.normalize(c.getPadding());
+        if (!padding.isEmpty()) {
+            style.append(" -fx-padding: ").append(padding).append(";");
+        }
+        boolean placeholder = c.getType() == ComponentType.TIMER
+                || c.getType() == ComponentType.WEB_VIEW
+                || c.getType() == ComponentType.MEDIA_PLAYER;
         if (!c.getBackground().isEmpty()) {
             style.append(" -fx-background-color: ").append(c.getBackground()).append(";");
         } else if (c.getType() == ComponentType.PANEL) {
-            style.append(" -fx-background-color: #f4f4f4; -fx-border-color: #c0c0c0;");
-        } else if (c.getType() == ComponentType.SPLIT_PANE || c.getType() == ComponentType.SCROLL_PANE) {
+            style.append(" -fx-background-color: #f4f4f4;");
+        } else if (placeholder) {
+            style.append(" -fx-background-color: #f4f4f422;");
+        }
+        if (!c.getBorderColor().isEmpty()) {
+            String width = CssInsets.normalize(c.getBorderWidth());
+            style.append(" -fx-border-color: ").append(c.getBorderColor())
+                 .append("; -fx-border-width: ").append(width.isEmpty() ? "1" : width).append(";");
+            if (c.getBorderRadius() > 0) {
+                String radius = CssInsets.fmt(c.getBorderRadius());
+                style.append(" -fx-border-radius: ").append(radius)
+                     .append("; -fx-background-radius: ").append(radius).append(";");
+            }
+        } else if (c.getType() == ComponentType.PANEL
+                || c.getType() == ComponentType.SPLIT_PANE
+                || c.getType() == ComponentType.SCROLL_PANE) {
             style.append(" -fx-border-color: #c0c0c0;");
-        } else if (c.getType() == ComponentType.IMAGE_VIEW && c.getImageData().isEmpty()) {
+        } else if ((c.getType() == ComponentType.IMAGE_VIEW && c.getImageData().isEmpty()) || placeholder) {
             style.append(" -fx-border-color: #c0c0c0; -fx-border-style: dashed;");
-        } else if (c.getType() == ComponentType.TIMER
-                || c.getType() == ComponentType.WEB_VIEW
-                || c.getType() == ComponentType.MEDIA_PLAYER) {
-            style.append(" -fx-border-color: #c0c0c0; -fx-border-style: dashed; -fx-background-color: #f4f4f422;");
         }
         return style.toString();
     }

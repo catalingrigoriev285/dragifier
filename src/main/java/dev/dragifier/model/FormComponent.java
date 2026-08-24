@@ -57,6 +57,20 @@ public class FormComponent {
     private int panes = 0;
     /** Comma-separated Splitter divider positions in 0..1. */
     private String dividers = "";
+    /** Font family name; empty = the theme default. */
+    private String fontFamily = "";
+    private boolean bold = false;
+    private boolean italic = false;
+    /** Custom border; empty color = the type's default look. Width is a CSS insets string (empty = 1). */
+    private String borderColor = "";
+    private String borderWidth = "";
+    private double borderRadius = 0;
+    /** CSS insets strings ("8" or "4 8 4 8"); margin only matters inside auto-layout containers. */
+    private String padding = "";
+    private String margin = "";
+    private boolean visible = true;
+    /** DEFAULT, HAND, TEXT, CROSSHAIR, MOVE, WAIT, NONE or empty for the default. */
+    private String cursor = "";
     private Map<String, String> events = new LinkedHashMap<>();
 
     public String getId() { return id; }
@@ -157,6 +171,36 @@ public class FormComponent {
 
     public String getDividers() { return dividers == null ? "" : dividers; }
     public void setDividers(String dividers) { this.dividers = dividers; }
+
+    public String getFontFamily() { return fontFamily == null ? "" : fontFamily; }
+    public void setFontFamily(String fontFamily) { this.fontFamily = fontFamily; }
+
+    public boolean isBold() { return bold; }
+    public void setBold(boolean bold) { this.bold = bold; }
+
+    public boolean isItalic() { return italic; }
+    public void setItalic(boolean italic) { this.italic = italic; }
+
+    public String getBorderColor() { return borderColor == null ? "" : borderColor; }
+    public void setBorderColor(String borderColor) { this.borderColor = borderColor; }
+
+    public String getBorderWidth() { return borderWidth == null ? "" : borderWidth; }
+    public void setBorderWidth(String borderWidth) { this.borderWidth = borderWidth; }
+
+    public double getBorderRadius() { return borderRadius; }
+    public void setBorderRadius(double borderRadius) { this.borderRadius = borderRadius; }
+
+    public String getPadding() { return padding == null ? "" : padding; }
+    public void setPadding(String padding) { this.padding = padding; }
+
+    public String getMargin() { return margin == null ? "" : margin; }
+    public void setMargin(String margin) { this.margin = margin; }
+
+    public boolean isVisible() { return visible; }
+    public void setVisible(boolean visible) { this.visible = visible; }
+
+    public String getCursor() { return cursor == null ? "" : cursor; }
+    public void setCursor(String cursor) { this.cursor = cursor; }
 
     /** Event key → Java handler body. Missing/blank entries mean "no handler". */
     public Map<String, String> getEvents() {

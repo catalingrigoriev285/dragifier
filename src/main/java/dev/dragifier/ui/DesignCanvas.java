@@ -322,7 +322,7 @@ public class DesignCanvas extends Pane {
         }
         List<Pane> panesBefore = Renderer.contentPanes(node);
         Renderer.apply(node, c);
-        styleContainerNode(node, c);
+        styleDesignNode(node, c);
         positionWrapper(c, wrapper);
         boolean rehost = wrapper.getParent() != expectedHost(c);
         boolean panesChanged = c.getType().isContainer() && !panesBefore.equals(Renderer.contentPanes(node));
@@ -378,7 +378,7 @@ public class DesignCanvas extends Pane {
                     if (wrapper != null && child.getDock() != Dock.NONE) {
                         positionWrapper(child, wrapper);
                         Renderer.apply(innerNode(child), child);
-                        styleContainerNode(innerNode(child), child);
+                        styleDesignNode(innerNode(child), child);
                     }
                 }
                 if (selection.size() == 1) {
@@ -496,10 +496,10 @@ public class DesignCanvas extends Pane {
             node.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
         }
         boolean container = c.getType().isContainer();
+        styleDesignNode(node, c);
         if (container) {
             // a mouse-transparent container would hide its children from the mouse too;
             // presses on empty content bubble up to this wrapper instead
-            styleContainerNode(node, c);
             if (node instanceof SplitPane split) {
                 node.addEventFilter(MouseEvent.MOUSE_RELEASED, e -> commitDividers(c, split));
             }
@@ -595,16 +595,21 @@ public class DesignCanvas extends Pane {
         }
     }
 
-    /** Design-time tweaks for container nodes: keep children clickable even when "disabled". */
-    private void styleContainerNode(Region node, FormComponent c) {
-        if (!c.getType().isContainer()) {
-            return;
-        }
-        node.setDisable(false);
-        node.setOpacity(c.isDisabled() ? 0.5 : 1);
-        node.setFocusTraversable(false);
-        if (node instanceof javafx.scene.layout.GridPane grid) {
-            grid.setGridLinesVisible(true); // design-time only; generated code leaves them off
+    /**
+     * Design-time tweaks after {@link Renderer#apply}: invisible components stay
+     * visible but ghosted so they can still be selected; containers stay enabled
+     * (a disabled one would swallow its children's mouse events) and show grid lines.
+     */
+    private void styleDesignNode(Region node, FormComponent c) {
+        boolean container = c.getType().isContainer();
+        node.setVisible(true);
+        node.setOpacity(!c.isVisible() ? 0.35 : container && c.isDisabled() ? 0.5 : 1);
+        if (container) {
+            node.setDisable(false);
+            node.setFocusTraversable(false);
+            if (node instanceof javafx.scene.layout.GridPane grid) {
+                grid.setGridLinesVisible(true); // design-time only; generated code leaves them off
+            }
         }
     }
 

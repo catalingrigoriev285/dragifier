@@ -139,6 +139,16 @@ public class MainWindow {
             tree.select(c);
             markDirty();
         });
+        inspector.setOnEditEvent((c, key) -> {
+            bottomTabs.getSelectionModel().select(0);
+            if (c == null) {
+                eventEditor.showForm(model);
+            } else {
+                eventEditor.showComponent(c);
+            }
+            eventEditor.selectEvent(key);
+            eventEditor.focusCode();
+        });
         canvas.setOnGeometryChanged(c -> {
             inspector.updateGeometry(c);
             markDirty();
