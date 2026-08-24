@@ -28,6 +28,7 @@ public final class Icons {
             case TABLE_VIEW -> Feather.COLUMNS;
             case WEB_VIEW -> Feather.GLOBE;
             case MEDIA_PLAYER -> Feather.PLAY_CIRCLE;
+            case FILE_BROWSER -> Feather.HARD_DRIVE;
             case GROUP_BOX -> Feather.SQUARE;
             case SCROLL_PANE -> Feather.MAXIMIZE;
             case TAB_PANE -> Feather.FOLDER;

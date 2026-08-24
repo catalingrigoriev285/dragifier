@@ -66,7 +66,16 @@ public final class JavaCodeGenerator {
                 + "    }\n"
                 + "}\n");
         sources.put(RuntimeApi.FILE_NAME, RuntimeApi.SOURCE);
+        if (usesType(project, ComponentType.FILE_BROWSER)) {
+            sources.put(FileBrowserApi.FILE_NAME, FileBrowserApi.SOURCE);
+        }
         return sources;
+    }
+
+    private static boolean usesType(ProjectModel project, ComponentType type) {
+        return project.getForms().stream()
+                .flatMap(f -> f.getComponents().stream())
+                .anyMatch(c -> c.getType() == type);
     }
 
     private static String mainSource(ProjectModel project) {
@@ -266,6 +275,22 @@ public final class JavaCodeGenerator {
                     out.append("        ").append(var).append(".getTabs().add(").append(tabVar).append(");\n");
                 }
             }
+            case FILE_BROWSER -> {
+                if (!c.getText().isBlank()) {
+                    out.append("        ").append(var).append(".setRoot(\"").append(escape(c.getText())).append("\");\n");
+                }
+                var filters = Renderer.lines(c.getItems());
+                if (!filters.isEmpty()) {
+                    out.append("        ").append(var).append(".setFilters(");
+                    for (int i = 0; i < filters.size(); i++) {
+                        if (i > 0) {
+                            out.append(", ");
+                        }
+                        out.append("\"").append(escape(filters.get(i))).append("\"");
+                    }
+                    out.append(");\n");
+                }
+            }
             case STACK_PANEL -> out.append("        ").append(var).append(".setSpacing(")
                     .append(fmt(c.getSpacing())).append(");\n");
             case GRID_PANE -> {
@@ -462,6 +487,7 @@ public final class JavaCodeGenerator {
                 case TIMER_TICK -> {
                     continue; // embedded by appendTimer, never reaches here
                 }
+                case FILE_CALLBACK -> out.append("        ").append(var).append(".").append(spec.setter()).append("(file -> {\n");
             }
             appendUserCode(out, code, form, c.getId(), spec.key(), cls, map);
             out.append("        });\n");
@@ -494,6 +520,7 @@ public final class JavaCodeGenerator {
             case TABLE_VIEW -> "TableView<ObservableList<String>>";
             case WEB_VIEW -> "WebView";
             case MEDIA_PLAYER -> "MediaView";
+            case FILE_BROWSER -> "FileBrowser";
         };
     }
 
@@ -502,7 +529,7 @@ public final class JavaCodeGenerator {
             case BUTTON, LABEL, TEXT_FIELD, TEXT_AREA, CHECK_BOX, RADIO_BUTTON, HYPERLINK, GROUP_BOX -> true;
             case SLIDER, PANEL, COMBO_BOX, LIST_VIEW, PROGRESS_BAR, IMAGE_VIEW, TIMER,
                  TABLE_VIEW, WEB_VIEW, MEDIA_PLAYER, SCROLL_PANE, TAB_PANE, SPLIT_PANE,
-                 STACK_PANEL, GRID_PANE, DOCK_PANEL -> false;
+                 STACK_PANEL, GRID_PANE, DOCK_PANEL, FILE_BROWSER -> false;
         };
     }
 

@@ -38,6 +38,9 @@ public final class CompletionCatalog {
                     "getEngine().load(\"https://\")", "getEngine().reload()", "getEngine().getLocation()");
             case MEDIA_PLAYER -> List.of(
                     "getMediaPlayer().play()", "getMediaPlayer().pause()", "getMediaPlayer().stop()");
+            case FILE_BROWSER -> List.of(
+                    "getSelectedFile()", "getSelectedPath()", "getRootPath()",
+                    "setRoot(\"\")", "setFilters(\"txt\")", "reload()");
             case GROUP_BOX -> List.of("setText(\"\")", "getText()", "setExpanded(true)", "getContent()");
             case SCROLL_PANE -> List.of("setVvalue(0)", "setHvalue(0)", "getContent()");
             case TAB_PANE -> List.of(
@@ -55,7 +58,9 @@ public final class CompletionCatalog {
     public static List<String> uiHelpers() {
         return List.of(
                 "alert(\"\")", "confirm(\"\")", "prompt(\"\", \"\")", "copyToClipboard(\"\")",
-                "openFileDialog()", "saveFileDialog()", "openLink(\"https://\")", "row(\"\")");
+                "notify(\"\")", "notify(\"\", \"\")", "notifySuccess(\"\")", "notifyWarning(\"\")", "notifyError(\"\")",
+                "openFileDialog()", "saveFileDialog()", "chooseFolder()", "readFile(\"\")", "writeFile(\"\", \"\")",
+                "openLink(\"https://\")", "row(\"\")", "eval(\"\")", "formatNumber(0)");
     }
 
     public static List<String> stageMethods() {

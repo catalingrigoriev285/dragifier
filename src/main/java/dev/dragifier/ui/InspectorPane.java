@@ -47,6 +47,9 @@ public class InspectorPane extends VBox {
     private final TextField wField = new TextField();
     private final TextField hField = new TextField();
     private final TextField textField = new TextField();
+    private Label textLabel;
+    private final javafx.scene.layout.HBox folderButtons = new javafx.scene.layout.HBox(6);
+    private Label folderLabel;
     private final TextField fontField = new TextField();
     private final ColorPicker textColorPicker = new ColorPicker();
     private final CheckBox customBg = new CheckBox("Custom background");
@@ -140,7 +143,7 @@ public class InspectorPane extends VBox {
 
         setupGrid(appearanceGrid);
         row = 0;
-        addRow(appearanceGrid, row++, "Text", textField);
+        textLabel = addRow(appearanceGrid, row++, "Text", textField);
         addRow(appearanceGrid, row++, "Font size", fontField);
         addRow(appearanceGrid, row++, "Text color", textColorPicker);
         appearanceGrid.add(customBg, 0, row++, 2, 1);
@@ -183,7 +186,16 @@ public class InspectorPane extends VBox {
             current.setMediaFormat("");
         }));
         mediaButtons.getChildren().addAll(chooseMedia, clearMedia);
-        mediaLabel = addRow(behaviorGrid, row, "Media", mediaButtons);
+        mediaLabel = addRow(behaviorGrid, row++, "Media", mediaButtons);
+        javafx.scene.control.Button chooseFolder = new javafx.scene.control.Button("Choose…");
+        javafx.scene.control.Button clearFolder = new javafx.scene.control.Button("Home");
+        chooseFolder.setOnAction(e -> pickFolder());
+        clearFolder.setOnAction(e -> {
+            applyComponent(() -> current.setText(""));
+            textField.setText("");
+        });
+        folderButtons.getChildren().addAll(chooseFolder, clearFolder);
+        folderLabel = addRow(behaviorGrid, row, "Folder", folderButtons);
 
         setupGrid(formGrid);
         addRow(formGrid, 0, "Name", nameField);
@@ -326,10 +338,14 @@ public class InspectorPane extends VBox {
         slotLabel.setText(parent != null && parent.getType() == ComponentType.TAB_PANE ? "Tab #" : "Pane #");
         setRowVisible(slotLabel, slotField, slotted);
         slotField.setText(slotted ? String.valueOf(ContainerGeometry.slotIndex(c, parent) + 1) : "");
+        boolean browser = c.getType() == ComponentType.FILE_BROWSER;
         boolean hasItems = c.getType() == ComponentType.COMBO_BOX || c.getType() == ComponentType.LIST_VIEW
-                || c.getType() == ComponentType.TAB_PANE;
-        itemsLabel.setText(c.getType() == ComponentType.TAB_PANE ? "Tabs" : "Items");
-        itemsArea.setPromptText(c.getType() == ComponentType.TAB_PANE ? "One tab title per line" : "One item per line");
+                || c.getType() == ComponentType.TAB_PANE || browser;
+        itemsLabel.setText(c.getType() == ComponentType.TAB_PANE ? "Tabs" : browser ? "Filters" : "Items");
+        itemsArea.setPromptText(c.getType() == ComponentType.TAB_PANE ? "One tab title per line"
+                : browser ? "One extension per line, e.g. txt (empty = all files)" : "One item per line");
+        textLabel.setText(browser ? "Root folder" : c.getType() == ComponentType.WEB_VIEW ? "URL" : "Text");
+        setRowVisible(folderLabel, folderButtons, browser);
         setRowVisible(itemsLabel, itemsArea, hasItems);
         itemsArea.setText(c.getItems());
         boolean split = c.getType() == ComponentType.SPLIT_PANE;
@@ -672,6 +688,20 @@ public class InspectorPane extends VBox {
             javafx.scene.control.Alert alert = new javafx.scene.control.Alert(
                     javafx.scene.control.Alert.AlertType.ERROR, "Could not read image: " + ex.getMessage());
             alert.showAndWait();
+        }
+    }
+
+    private void pickFolder() {
+        if (current == null) {
+            return;
+        }
+        javafx.stage.DirectoryChooser chooser = new javafx.stage.DirectoryChooser();
+        chooser.setTitle("Choose Root Folder");
+        java.io.File dir = chooser.showDialog(getScene().getWindow());
+        if (dir != null) {
+            String path = dir.getAbsolutePath();
+            applyComponent(() -> current.setText(path));
+            textField.setText(path);
         }
     }
 

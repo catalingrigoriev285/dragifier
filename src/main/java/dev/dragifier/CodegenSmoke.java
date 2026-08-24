@@ -162,6 +162,25 @@ public final class CodegenSmoke {
         FormComponent editor = form.create(ComponentType.TEXT_AREA, 0, 0, shell, "");
         editor.setDock(dev.dragifier.model.Dock.FILL);
 
+        // FileBrowser component + the notification/file/number helpers of the runtime API
+        FormComponent browser = form.create(ComponentType.FILE_BROWSER, 1600, 340);
+        browser.setText(System.getProperty("java.io.tmpdir"));
+        browser.setItems("txt\n*.log\n.md");
+        browser.getEvents().put("onFileSelected", "label1.setText(file.getName());");
+        browser.getEvents().put("onFileOpened", "UI.notify(\"Opened\", file.getAbsolutePath());");
+        FormComponent helpers = form.create(ComponentType.BUTTON, 1600, 560);
+        helpers.setText("Helpers");
+        helpers.getEvents().put("onAction",
+                "String folder = UI.chooseFolder();\n"
+                + "if (folder != null && UI.writeFile(folder + \"/note.txt\", \"hi\")) {\n"
+                + "    UI.notifySuccess(UI.readFile(folder + \"/note.txt\"));\n"
+                + "}\n"
+                + "UI.notifyWarning(UI.formatNumber(UI.eval(\"2+2\")));\n"
+                + "UI.notifyError(\"nope\");\n"
+                + "UI.notify(\"plain\");\n"
+                + "fileBrowser1.setRoot(folder);\n"
+                + "fileBrowser1.reload();");
+
         // second form, opened from the first with plain Java
         FormModel second = project.addForm();
         second.setTitle("Second Form");
@@ -174,9 +193,17 @@ public final class CodegenSmoke {
         project.setIconData(image.getImageData());
         project.setIconFormat("png");
 
-        for (var entry : JavaCodeGenerator.generateProject(project).entrySet()) {
+        var sources = JavaCodeGenerator.generateProject(project);
+        for (var entry : sources.entrySet()) {
             System.out.println("===== " + entry.getKey() + " =====");
             System.out.println(entry.getValue());
+        }
+        if (!sources.containsKey(dev.dragifier.codegen.FileBrowserApi.FILE_NAME)) {
+            fail("FileBrowser.java was not emitted for a project that uses a FileBrowser");
+        }
+        if (JavaCodeGenerator.generateProject(ProjectModel.withDefaultForm())
+                .containsKey(dev.dragifier.codegen.FileBrowserApi.FILE_NAME)) {
+            fail("FileBrowser.java was emitted for a project without a FileBrowser");
         }
 
         AppRunner.CompileResult result = AppRunner.compile(project);
@@ -186,6 +213,7 @@ public final class CodegenSmoke {
             System.err.println("SMOKE FAILED:\n" + result.errorDetails());
             System.exit(1);
         }
+        checkRuntimeMath(result);
         if (!java.nio.file.Files.exists(result.dir().resolve(JavaCodeGenerator.imageResource(form, image)))) {
             System.err.println("SMOKE FAILED: image resource was not written to the build dir");
             System.exit(1);
@@ -207,6 +235,7 @@ public final class CodegenSmoke {
         checkSourceMap(project, button);
         checkNesting(form, group);
         checkDocking(form, shell, toolbar, sidebar, editor, statusBar);
+        checkTemplatesLayout();
 
         for (var template : dev.dragifier.model.Templates.all()) {
             AppRunner.CompileResult tr = AppRunner.compile(template.factory().get());
@@ -270,6 +299,58 @@ public final class CodegenSmoke {
     private static void fail(String message) {
         System.err.println("SMOKE FAILED: " + message);
         System.exit(1);
+    }
+
+    /** Loads the compiled runtime {@code UI} class and exercises the expression evaluator (no FX toolkit needed). */
+    private static void checkRuntimeMath(AppRunner.CompileResult result) throws Exception {
+        try (var loader = new java.net.URLClassLoader(
+                new java.net.URL[]{result.dir().toUri().toURL()}, CodegenSmoke.class.getClassLoader())) {
+            Class<?> ui = Class.forName("UI", true, loader);
+            var eval = ui.getMethod("eval", String.class);
+            var format = ui.getMethod("formatNumber", double.class);
+            double[][] cases = {
+                    {(double) eval.invoke(null, "2+3*4"), 14},
+                    {(double) eval.invoke(null, "(2+3)*4"), 20},
+                    {(double) eval.invoke(null, "10÷4"), 2.5},
+                    {(double) eval.invoke(null, "-3+5"), 2},
+                    {(double) eval.invoke(null, "7×8−6"), 50},
+                    {(double) eval.invoke(null, "10%4"), 2},
+                    {(double) eval.invoke(null, " 1,5 * 2 "), 3}};
+            for (double[] c : cases) {
+                if (c[0] != c[1]) {
+                    fail("UI.eval returned " + c[0] + " instead of " + c[1]);
+                }
+            }
+            if (!Double.isNaN((double) eval.invoke(null, "2+"))
+                    || !Double.isNaN((double) eval.invoke(null, "abc"))
+                    || !Double.isNaN((double) eval.invoke(null, "(1+2"))) {
+                fail("UI.eval accepted an invalid expression");
+            }
+            if (!"2".equals(format.invoke(null, 2.0)) || !"2.5".equals(format.invoke(null, 2.5))
+                    || !"Error".equals(format.invoke(null, Double.NaN))) {
+                fail("UI.formatNumber formatting is off");
+            }
+        }
+        System.out.println("SMOKE OK: runtime UI.eval/formatNumber behave.");
+    }
+
+    /** The Notepad template's docked layout resolves as designed. */
+    private static void checkTemplatesLayout() {
+        var notepad = dev.dragifier.model.Templates.all().stream()
+                .filter(t -> t.name().equals("Notepad")).findFirst().orElseThrow().factory().get();
+        FormModel form = notepad.effectiveMain();
+        dev.dragifier.model.DockLayout.applyTo(form, null);
+        FormComponent area = form.getComponents().stream()
+                .filter(c -> c.getType() == ComponentType.TEXT_AREA).findFirst().orElseThrow();
+        expectRect(area, 0, 40, form.getWidth(), form.getHeight() - 40 - 24);
+        var calc = dev.dragifier.model.Templates.all().stream()
+                .filter(t -> t.name().equals("Calculator")).findFirst().orElseThrow().factory().get();
+        long keys = calc.effectiveMain().getComponents().stream()
+                .filter(c -> c.getType() == ComponentType.BUTTON).count();
+        if (keys != 20) {
+            fail("Calculator template should have 20 keys, has " + keys);
+        }
+        System.out.println("SMOKE OK: Notepad docks and Calculator keys are laid out as designed.");
     }
 
     /** Hierarchy invariants: subtree duplicate/remove, rename of a container, reparent guard, z-order, old JSON. */

@@ -274,12 +274,15 @@ public class EventEditorPane extends VBox {
         openForm.getItems().add(new javafx.scene.control.MenuItem("…"));
         insertMenu.getItems().addAll(
                 snippet("Show message", "UI.alert(\"Hello!\");\n"),
+                snippet("Show notification", "UI.notify(\"Title\", \"Message\");\n"),
                 snippet("Ask confirmation", "if (UI.confirm(\"Are you sure?\")) {\n    \n}\n"),
                 snippet("Ask for input", "String answer = UI.prompt(\"Enter a value:\", \"\");\n"),
                 snippet("Set label text", "label1.setText(\"New text\");\n"),
                 openForm,
                 snippet("Close this window", "stage.close();\n"),
                 snippet("Open link", "UI.openLink(\"https://example.com\");\n"),
+                snippet("Choose folder", "String folder = UI.chooseFolder();\n"),
+                snippet("Read text file", "String path = UI.openFileDialog();\nif (path != null) {\n    String text = UI.readFile(path);\n}\n"),
                 snippet("Copy to clipboard", "UI.copyToClipboard(\"text\");\n"),
                 snippet("Print to console", "System.out.println(\"debug\");\n"));
     }

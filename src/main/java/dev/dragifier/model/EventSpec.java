@@ -17,7 +17,9 @@ public record EventSpec(String key, String displayName, String hint, Kind kind, 
         /** Wired via {@code getSelectionModel().selectedItemProperty().addListener(...)}. */
         SELECTION_LISTENER,
         /** Timer tick — the handler body is embedded in the Timeline's KeyFrame. */
-        TIMER_TICK
+        TIMER_TICK,
+        /** Wired via a setter taking a {@code Consumer<File>}: {@code setOnFileOpened(file -> { ... })}. */
+        FILE_CALLBACK
     }
 
     /** Events of the form itself (edited when nothing is selected). */
@@ -56,6 +58,9 @@ public record EventSpec(String key, String displayName, String hint, Kind kind, 
                     new EventSpec("onSelect", "On select",
                             "(obs, oldValue, newValue) -> { ... }", Kind.SELECTION_LISTENER, null));
             case WEB_VIEW, MEDIA_PLAYER -> List.of();
+            case FILE_BROWSER -> List.of(
+                    new EventSpec("onFileSelected", "On select", "(file) -> { ... }", Kind.FILE_CALLBACK, "setOnFileSelected"),
+                    new EventSpec("onFileOpened", "On open", "(file) -> { ... }", Kind.FILE_CALLBACK, "setOnFileOpened"));
             case GROUP_BOX, SCROLL_PANE, SPLIT_PANE, STACK_PANEL, GRID_PANE, DOCK_PANEL -> List.of(
                     new EventSpec("onMouseClicked", "On click", "(event) -> { ... }", Kind.SETTER, "setOnMouseClicked"));
             case TAB_PANE -> List.of(

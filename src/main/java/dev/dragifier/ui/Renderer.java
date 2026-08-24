@@ -66,6 +66,7 @@ public final class Renderer {
             case TABLE_VIEW -> new javafx.scene.control.TableView<javafx.collections.ObservableList<String>>();
             case WEB_VIEW -> badge(org.kordamp.ikonli.feather.Feather.GLOBE);
             case MEDIA_PLAYER -> badge(org.kordamp.ikonli.feather.Feather.PLAY_CIRCLE);
+            case FILE_BROWSER -> new FileTreeView();
             case GROUP_BOX -> {
                 TitledPane pane = new TitledPane("", new AnchorPane());
                 pane.setCollapsible(false);
@@ -154,6 +155,9 @@ public final class Renderer {
             for (String name : lines(c.getColumns())) {
                 typed.getColumns().add(new javafx.scene.control.TableColumn<>(name));
             }
+        } else if (node instanceof FileTreeView files) {
+            files.setRoot(c.getText());
+            files.setFilters(lines(c.getItems()).toArray(String[]::new));
         } else if (node instanceof TabPane tabs) {
             syncTabs(tabs, c);
         } else if (node instanceof SplitPane split) {

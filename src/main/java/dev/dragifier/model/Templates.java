@@ -15,7 +15,145 @@ public final class Templates {
                 new Template("Hello World", Templates::helloWorld),
                 new Template("Counter", Templates::counter),
                 new Template("Login Form", Templates::loginForm),
-                new Template("Two Forms", Templates::twoForms));
+                new Template("Two Forms", Templates::twoForms),
+                new Template("Notepad", Templates::notepad),
+                new Template("Calculator", Templates::calculator));
+    }
+
+    /** A text editor: docked toolbar (StackPanel of buttons), filling TextArea, status bar. */
+    private static ProjectModel notepad() {
+        ProjectModel p = ProjectModel.withDefaultForm();
+        FormModel f = p.effectiveMain();
+        f.setTitle("Notepad");
+        f.setWidth(640);
+        f.setHeight(480);
+        f.setResizable(true);
+
+        // docking is sequential in z-order: toolbar and status strip first, the editor fills the rest
+        FormComponent toolbar = f.create(ComponentType.PANEL, 0, 0);           // panel1
+        toolbar.setHeight(40);
+        toolbar.setDock(Dock.TOP);
+        FormComponent status = f.create(ComponentType.LABEL, 0, 0);            // label1
+        status.setText("Untitled");
+        status.setHeight(24);
+        status.setDock(Dock.BOTTOM);
+        FormComponent editor = f.create(ComponentType.TEXT_AREA, 0, 0);        // textArea1
+        editor.setDock(Dock.FILL);
+
+        FormComponent row = f.create(ComponentType.STACK_PANEL, 4, 4, toolbar, ""); // stackPanel1
+        row.setOrientation("HORIZONTAL");
+        row.setSpacing(6);
+        row.setWidth(632);
+        row.setHeight(32);
+        row.setAnchorRight(true);
+
+        FormComponent newFile = f.create(ComponentType.BUTTON, 0, 0, row, "");  // button1
+        newFile.setText("New");
+        newFile.setWidth(72);
+        newFile.setHeight(30);
+        newFile.getEvents().put("onAction",
+                "textArea1.setText(\"\");\n"
+                + "label1.setText(\"Untitled\");");
+
+        FormComponent open = f.create(ComponentType.BUTTON, 0, 0, row, "");     // button2
+        open.setText("Open…");
+        open.setWidth(80);
+        open.setHeight(30);
+        open.getEvents().put("onAction",
+                "String path = UI.openFileDialog();\n"
+                + "if (path != null) {\n"
+                + "    String text = UI.readFile(path);\n"
+                + "    if (text != null) {\n"
+                + "        textArea1.setText(text);\n"
+                + "        label1.setText(\"File: \" + path);\n"
+                + "    } else {\n"
+                + "        UI.notifyError(\"Could not read \" + path);\n"
+                + "    }\n"
+                + "}");
+
+        FormComponent save = f.create(ComponentType.BUTTON, 0, 0, row, "");     // button3
+        save.setText("Save");
+        save.setWidth(72);
+        save.setHeight(30);
+        save.getEvents().put("onAction",
+                "String path = label1.getText().startsWith(\"File: \")\n"
+                + "        ? label1.getText().substring(6) : UI.saveFileDialog();\n"
+                + "if (path != null) {\n"
+                + "    if (UI.writeFile(path, textArea1.getText())) {\n"
+                + "        label1.setText(\"File: \" + path);\n"
+                + "        UI.notifySuccess(\"Saved \" + path);\n"
+                + "    } else {\n"
+                + "        UI.notifyError(\"Could not save \" + path);\n"
+                + "    }\n"
+                + "}");
+
+        FormComponent saveAs = f.create(ComponentType.BUTTON, 0, 0, row, "");   // button4
+        saveAs.setText("Save As…");
+        saveAs.setWidth(92);
+        saveAs.setHeight(30);
+        saveAs.getEvents().put("onAction",
+                "String path = UI.saveFileDialog();\n"
+                + "if (path != null) {\n"
+                + "    if (UI.writeFile(path, textArea1.getText())) {\n"
+                + "        label1.setText(\"File: \" + path);\n"
+                + "        UI.notifySuccess(\"Saved \" + path);\n"
+                + "    } else {\n"
+                + "        UI.notifyError(\"Could not save \" + path);\n"
+                + "    }\n"
+                + "}");
+        return p;
+    }
+
+    /** A pocket calculator: display field plus a 4×5 Grid of keys; UI.eval does the math. */
+    private static ProjectModel calculator() {
+        ProjectModel p = ProjectModel.withDefaultForm();
+        FormModel f = p.effectiveMain();
+        f.setTitle("Calculator");
+        f.setWidth(260);
+        f.setHeight(380);
+
+        FormComponent display = f.create(ComponentType.TEXT_FIELD, 12, 12);    // textField1
+        display.setWidth(236);
+        display.setHeight(48);
+        display.setFontSize(22);
+        display.setAlignment("RIGHT");
+        display.setAnchorRight(true);
+
+        FormComponent keys = f.create(ComponentType.GRID_PANE, 12, 72);        // gridPane1
+        keys.setWidth(236);
+        keys.setHeight(296);
+        keys.setGridColumns(4);
+        keys.setGridRows(5);
+        keys.setSpacing(4);
+        keys.setAnchorRight(true);
+        keys.setAnchorBottom(true);
+
+        String[][] rows = {
+                {"C", "⌫", "%", "÷"},
+                {"7", "8", "9", "×"},
+                {"4", "5", "6", "−"},
+                {"1", "2", "3", "+"},
+                {"±", "0", ".", "="}};
+        for (int r = 0; r < rows.length; r++) {
+            for (int col = 0; col < rows[r].length; col++) {
+                String text = rows[r][col];
+                FormComponent key = f.create(ComponentType.BUTTON, 0, 0, keys, col + "," + r);
+                key.setText(text);
+                key.setFontSize(16);
+                key.getEvents().put("onAction", switch (text) {
+                    case "C" -> "textField1.setText(\"\");";
+                    case "⌫" -> "String t = textField1.getText();\n"
+                            + "if (!t.isEmpty()) {\n"
+                            + "    textField1.setText(t.substring(0, t.length() - 1));\n"
+                            + "}";
+                    case "±" -> "String t = textField1.getText();\n"
+                            + "textField1.setText(t.startsWith(\"-\") ? t.substring(1) : \"-\" + t);";
+                    case "=" -> "textField1.setText(UI.formatNumber(UI.eval(textField1.getText())));";
+                    default -> "textField1.setText(textField1.getText() + \"" + text + "\");";
+                });
+            }
+        }
+        return p;
     }
 
     private static ProjectModel helloWorld() {

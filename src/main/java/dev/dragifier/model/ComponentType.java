@@ -19,6 +19,7 @@ public enum ComponentType {
     TABLE_VIEW("Table", "table", 260, 160, "", Category.OTHER, ContainerKind.NONE),
     WEB_VIEW("WebView", "webView", 280, 180, "https://example.com", Category.OTHER, ContainerKind.NONE),
     MEDIA_PLAYER("Media", "media", 240, 160, "", Category.OTHER, ContainerKind.NONE),
+    FILE_BROWSER("FileBrowser", "fileBrowser", 220, 200, "", Category.OTHER, ContainerKind.NONE),
     GROUP_BOX("GroupBox", "groupBox", 220, 150, "Group", Category.CONTAINER, ContainerKind.GROUP),
     SCROLL_PANE("ScrollView", "scrollPane", 220, 150, "", Category.CONTAINER, ContainerKind.SCROLL),
     TAB_PANE("TabControl", "tabPane", 280, 180, "", Category.CONTAINER, ContainerKind.TABS),
