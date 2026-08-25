@@ -33,6 +33,9 @@ public class InspectorPane extends VBox {
     private BiPredicate<FormComponent, String> renamer = (c, id) -> false;
     private BiConsumer<FormComponent, String> onEditEvent = (c, key) -> {};
 
+    /** The width a property row needs; the pane opens at this and never shrinks below it. */
+    private static final double CONTENT_WIDTH = 254;
+
     private final Label header = new Label();
     private final TextField searchField = new TextField();
     private final PropertyGrid grid = new PropertyGrid();
@@ -40,7 +43,11 @@ public class InspectorPane extends VBox {
     public InspectorPane() {
         setSpacing(8);
         setPadding(new Insets(10));
-        setPrefWidth(260);
+        // Wide enough for a full property row without a horizontal scrollbar:
+        // 20 pane padding + 12 grid padding + 88 label column + 8 hgap
+        // + 110 widest editor + ~16 vertical scrollbar.
+        setPrefWidth(CONTENT_WIDTH);
+        setMinWidth(CONTENT_WIDTH);
         getStyleClass().addAll("side-panel", "inspector");
 
         header.getStyleClass().add("panel-header");

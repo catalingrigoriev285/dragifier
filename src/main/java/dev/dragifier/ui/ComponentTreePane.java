@@ -32,6 +32,9 @@ public class ComponentTreePane extends VBox {
 
     private static final String DRAG_PREFIX = "dragifier-tree:";
 
+    /** The width a nested component row needs; the pane opens at this and never shrinks below it. */
+    private static final double CONTENT_WIDTH = 218;
+
     /** (moved, new parent or null for the form, index among the new siblings excluding {@code moved}). */
     public interface MoveHandler {
         void move(FormComponent moved, FormComponent newParent, int index);
@@ -49,6 +52,11 @@ public class ComponentTreePane extends VBox {
     public ComponentTreePane() {
         setSpacing(6);
         setPadding(new Insets(10));
+        // Fits a nested row like "button1 - Button" without a horizontal scrollbar:
+        // 20 pane padding + ~36 two levels of indent + 14 disclosure arrow
+        // + 16 icon + 6 gap + ~110 label + ~16 vertical scrollbar.
+        setPrefWidth(CONTENT_WIDTH);
+        setMinWidth(CONTENT_WIDTH);
         getStyleClass().add("side-panel");
 
         Label title = new Label("Components");

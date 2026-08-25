@@ -13,6 +13,9 @@ import dev.dragifier.packager.AppPackager;
 import dev.dragifier.runner.AppRunner;
 import dev.dragifier.undo.UndoManager;
 import javafx.application.Application;
+import javafx.application.Platform;
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableValue;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
@@ -217,8 +220,7 @@ public class MainWindow {
         designerSplit.setOrientation(Orientation.HORIZONTAL);
         SplitPane.setResizableWithParent(leftPanel, false);
         SplitPane.setResizableWithParent(inspector, false);
-        designerSplit.setDividerPositions(0.15, 0.82);
-        inspector.setMinWidth(180);
+        fitSidePanels((Region) leftPanel, inspector);
 
         toolBar = buildToolBar();
         root.setTop(new VBox(buildMenuBar(), toolBar));
@@ -450,12 +452,42 @@ public class MainWindow {
         }
     }
 
+    /**
+     * Opens each side panel at the width its own content needs, once the split has a real width.
+     * Left alone a SplitPane splits evenly, and the fixed 0.15/0.82 fractions this used to use
+     * clipped the property editors and the component tree behind horizontal scrollbars. The
+     * positions are applied on the pulse after layout — SplitPane rewrites them during its own
+     * layout pass, so setting them inline is silently discarded.
+     */
+    private void fitSidePanels(Region leftPanel, Region rightPanel) {
+        designerSplit.widthProperty().addListener(new ChangeListener<>() {
+            @Override
+            public void changed(ObservableValue<? extends Number> obs, Number was, Number is) {
+                if (is.doubleValue() <= 0) {
+                    return;  // still on the welcome page, nothing laid out yet
+                }
+                designerSplit.widthProperty().removeListener(this);
+                Platform.runLater(() -> {
+                    double total = designerSplit.getWidth();
+                    if (total > 0) {
+                        designerSplit.setDividerPositions(
+                                leftPanel.getPrefWidth() / total,
+                                1 - rightPanel.getPrefWidth() / total);
+                    }
+                });
+            }
+        });
+    }
+
     private Node buildLeftPanel() {
-        SplitPane left = new SplitPane(new PalettePane(), tree);
+        PalettePane palette = new PalettePane();
+        SplitPane left = new SplitPane(palette, tree);
         left.setOrientation(Orientation.VERTICAL);
         left.setDividerPositions(0.6);
-        left.setPrefWidth(190);
-        left.setMinWidth(140);
+        // as wide as the hungriest of the two stacked panes, so neither has to scroll sideways
+        double width = Math.max(palette.getPrefWidth(), tree.getPrefWidth());
+        left.setPrefWidth(width);
+        left.setMinWidth(width);
         return left;
     }
 

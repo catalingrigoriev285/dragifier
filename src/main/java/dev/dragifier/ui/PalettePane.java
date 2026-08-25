@@ -17,12 +17,18 @@ import java.util.List;
 /** Palette of draggable component types, grouped by category. */
 public class PalettePane extends VBox {
 
+    /** The width a palette item needs; the pane opens at this and never shrinks below it. */
+    private static final double CONTENT_WIDTH = 150;
+
     private record Section(Label header, List<Label> items) {}
 
     public PalettePane() {
         setSpacing(6);
         setPadding(new Insets(10));
-        setPrefWidth(170);
+        // 20 pane padding + 20 item padding + 16 icon + 8 gap
+        // + ~70 widest component name + ~16 vertical scrollbar.
+        setPrefWidth(CONTENT_WIDTH);
+        setMinWidth(CONTENT_WIDTH);
         getStyleClass().add("side-panel");
 
         Label title = new Label("Palette");
