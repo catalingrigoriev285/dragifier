@@ -18,12 +18,17 @@ gradlew smoke          # headless verification: codegen → in-process javac com
 gradlew packageSmoke   # full compile → jar → jpackage pipeline (slow, ~minutes)
                        #   -PpackageDest=<dir>  keep the output instead of a temp dir
                        #   -PpackageWeb         exercise the WebView/classpath packaging path
+gradlew aiSmoke        # headless verification of the AI edit protocol: prompt coverage, op
+                       # applier, digest, reply parsing, and a full turn through a canned
+                       # transport. No API key and no network needed.
+                       #   --args=--print-prompt   dump the generated system prompt
 gradlew build          # compile only; there is no JUnit suite
 ```
 
-There is no `src/test`. All verification lives in two `main()` classes wired to Gradle `JavaExec`
-tasks: [CodegenSmoke.java](src/main/java/dev/dragifier/CodegenSmoke.java) and
-[PackageSmoke.java](src/main/java/dev/dragifier/PackageSmoke.java). `CodegenSmoke.main` builds one
+There is no `src/test`. All verification lives in `main()` classes wired to Gradle `JavaExec`
+tasks: [CodegenSmoke.java](src/main/java/dev/dragifier/CodegenSmoke.java),
+[PackageSmoke.java](src/main/java/dev/dragifier/PackageSmoke.java) and
+[AiSmoke.java](src/main/java/dev/dragifier/AiSmoke.java). `CodegenSmoke.main` builds one
 project exercising every component family, compiles it, then calls a series of `check*` methods —
 add a new `private static void checkX(...)` and call it from `main` to cover new behavior. To run a
 subset, run the class directly (`gradlew smoke` runs all of it; it is fast).
@@ -100,17 +105,46 @@ declared in [ComponentProperties.java](src/main/java/dev/dragifier/ui/ComponentP
 `ProjectIO.load` still accepts legacy single-form project files (no `forms` key) by wrapping them —
 don't break that path.
 
+### AI assistant
+
+[dev.dragifier.ai](src/main/java/dev/dragifier/ai/) is headless except for `AiSession`. The user
+describes an app; the model replies with `{"reply": …, "ops": […]}` and the ops are applied to the
+`ProjectModel`. Chat lives in an `AiChatPane` tabbed beside the inspector in the right column.
+
+- **The prompt describes the running code, not a copy of it.** `PromptBuilder` walks
+  `ComponentType.values()`, `EventSpec.forType`, `OpApplier.patchableKeys()`,
+  `CompletionCatalog.methodsFor` and the `public static` signatures inside `RuntimeApi.SOURCE`. The
+  worked example it shows is applied and compiled by `AiSmoke`, so it cannot drift into being wrong.
+- **`ProjectDigest`, never `ProjectIO.toJson`, goes into a prompt.** Projects inline images and
+  media as Base64; sending the raw JSON would blow the context window and bill for it every turn.
+  The digest also drops properties still at their default (~5× smaller).
+- **`OpApplier` validates rather than trusts.** Event keys especially: `JavaCodeGenerator`
+  *looks up* keys per type and silently drops the ones that don't fit, so a bad key would compile
+  cleanly and do nothing — the one class of mistake the compile check cannot catch. Properties are
+  applied as a Gson merge patch in the field names the model was shown, so there is no setter table
+  here to fall out of date.
+- **Threading**: model reads and writes on the FX thread only; the compile check runs against a
+  `ProjectIO` deep copy because `JavaCodeGenerator` calls `DockLayout.applyTo`, which writes geometry
+  back into the components it is handed; streaming deltas are coalesced to one UI update per pulse.
+- One `undoManager.checkpoint(null)` per turn — `null`, not a tag, or consecutive turns would
+  coalesce into a single undo step. Exactly one automatic repair round, structurally, not by counter.
+
 ## Cross-file checklists
 
 **Adding a component type** — `ComponentType` enum (display name, id prefix, default size,
 `Category`, `ContainerKind`) → `Renderer.createNode` + styling helpers → `LiveBuilder` if it needs
 special sizing → `JavaCodeGenerator` (`javaTypeFor`, `hasText`, the construction/config switch, event wiring) →
 `EventSpec.forType` → `ComponentProperties` (`applies` predicates for its properties) →
-`CompletionCatalog.methodsFor` → a case in `CodegenSmoke.main`.
+`CompletionCatalog.methodsFor` → a case in `CodegenSmoke.main`. The AI system prompt needs no edit:
+`PromptBuilder` enumerates the enums, and `AiSmoke.checkPromptCoverage` fails the build if a type or
+event key never reaches the prompt.
 
 **Adding a property** — field + getter/setter on `FormComponent` (null-safe getter for Strings, so
 old project files load) → `Renderer` application → `JavaCodeGenerator` emission → a `PropertySpec`
-row in `ComponentProperties` → assert it in `CodegenSmoke.checkStyling` or similar.
+row in `ComponentProperties` → `FormModel.copyOne` (hand-maintained, silently drops what it misses)
+→ assert it in `CodegenSmoke.checkStyling` or similar. The AI reaches the new property
+automatically — `OpApplier` patches through Gson, not a setter table — but give it a line in
+`PromptBuilder.propertyNotes` if its value format isn't obvious.
 
 ## Conventions
 

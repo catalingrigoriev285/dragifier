@@ -782,13 +782,17 @@ public class MainWindow {
         if (!project.getForms().contains(model)) {
             model = project.effectiveMain();  // the assistant deleted the form we were on
         }
-        bindProject();
-        canvas.rebuild();
+        bindProject();  // setModel rebuilds the canvas, so nothing else to refresh
         markDirty();
     }
 
     private void startAiTurn(String text, String scope) {
         if (text == null || text.isBlank()) {
+            return;
+        }
+        if (aiSession.isBusy()) {
+            focusAiTab();
+            status.setText("The assistant is still working on the last request");
             return;
         }
         if (!AiSettings.configured()) {
@@ -1123,6 +1127,7 @@ public class MainWindow {
 
     private void run() {
         console.clear();
+        lastCompileFailure = null;  // don't let "Fix Last Errors" offer a stale failure
         focusCodeTab(consoleTab);
         AppRunner.run(project,
                 s -> {
