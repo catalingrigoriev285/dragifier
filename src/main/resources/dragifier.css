@@ -174,11 +174,34 @@
     -fx-cursor: hand;
 }
 
-/* maximize/restore toggle overlaid on the bottom Events/Console tab strip */
-.bottom-max-button {
+/* maximize/restore toggle overlaid at the right end of a tab strip */
+.pane-max-button {
     -fx-padding: 2 6 2 6;
     -fx-background-radius: 4;
 }
-.bottom-max-button .ikonli-font-icon {
+.pane-max-button .ikonli-font-icon {
     -fx-icon-size: 14;
+}
+
+/* Tab titles live in a graphic node so they can act as drag handles for reordering;
+   mirror the built-in .tab-label colors so they match in both themes. */
+.tab .drag-tab,
+.tab .drag-tab .label {
+    -fx-text-fill: -color-fg-muted;
+}
+.tab:selected .drag-tab,
+.tab:selected .drag-tab .label {
+    -fx-text-fill: -color-fg-default;
+}
+.tab .drag-tab .ikonli-font-icon {
+    -fx-icon-color: -color-fg-muted;
+}
+.tab:selected .drag-tab .ikonli-font-icon {
+    -fx-icon-color: -color-fg-default;
+}
+
+/* insertion indicator while a tab is dragged over this one */
+.drag-tab.drop-target {
+    -fx-border-color: -color-accent-emphasis;
+    -fx-border-width: 0 0 2 0;
 }

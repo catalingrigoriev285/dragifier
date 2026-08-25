@@ -59,6 +59,17 @@ public class ProjectModel {
         return form;
     }
 
+    /** Moves a form to {@code index} (clamped); form order is the tab order and is saved with the project. */
+    public void moveForm(FormModel form, int index) {
+        List<FormModel> list = getForms();
+        int from = list.indexOf(form);
+        if (from < 0) {
+            return;
+        }
+        list.remove(from);
+        list.add(Math.max(0, Math.min(index, list.size())), form);
+    }
+
     /** Removes a form; refuses to remove the last one. */
     public boolean removeForm(FormModel form) {
         if (getForms().size() <= 1) {

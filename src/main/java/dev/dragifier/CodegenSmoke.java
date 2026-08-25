@@ -248,6 +248,7 @@ public final class CodegenSmoke {
         System.out.println("SMOKE OK: media resource written.");
 
         checkUndoRedo(project, label);
+        checkFormOrder();
         checkRename(project, form, button);
         checkSourceMap(project, button);
         checkNesting(form, group);
@@ -508,6 +509,44 @@ public final class CodegenSmoke {
             fail(c.getId() + " docked to " + c.getDock() + " is at (" + c.getX() + "," + c.getY() + ","
                     + c.getWidth() + "," + c.getHeight() + "), expected (" + x + "," + y + "," + w + "," + h + ")");
         }
+    }
+
+    /** Tab drag-reordering rewrites the form list, so order has to survive a save/load round-trip. */
+    private static void checkFormOrder() {
+        ProjectModel project = ProjectModel.withDefaultForm();
+        FormModel second = project.addForm();
+        FormModel third = project.addForm();
+        project.setMainForm(second.getName());
+
+        project.moveForm(third, 0);
+        if (!"Form3,Form1,Form2".equals(formNames(project))) {
+            fail("moveForm did not reorder: " + formNames(project));
+        }
+        project.moveForm(third, 99);  // out of range clamps to the end
+        if (!"Form1,Form2,Form3".equals(formNames(project))) {
+            fail("moveForm did not clamp an out-of-range index: " + formNames(project));
+        }
+
+        project.moveForm(third, 0);
+        ProjectModel loaded = ProjectIO.fromJson(ProjectIO.toJson(project));
+        if (!formNames(project).equals(formNames(loaded))) {
+            fail("form order was lost in the JSON round-trip: " + formNames(loaded));
+        }
+        if (!second.getName().equals(loaded.effectiveMain().getName())) {
+            fail("reordering changed the main form to " + loaded.effectiveMain().getName());
+        }
+
+        var sources = JavaCodeGenerator.generateProject(loaded);
+        for (FormModel f : loaded.getForms()) {
+            if (!sources.containsKey(JavaCodeGenerator.className(f) + ".java")) {
+                fail("reordered project dropped source for " + f.getName());
+            }
+        }
+        System.out.println("SMOKE OK: form reordering clamps, persists and keeps the main form.");
+    }
+
+    private static String formNames(ProjectModel project) {
+        return String.join(",", project.getForms().stream().map(FormModel::getName).toList());
     }
 
     private static void checkUndoRedo(ProjectModel project, FormComponent label) {

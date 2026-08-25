@@ -63,7 +63,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
 
 /** The main IDE window: menus, icon toolbar, form tabs, palette, design canvas, inspector, events/console. */
 public class MainWindow {
@@ -95,10 +99,20 @@ public class MainWindow {
     private WelcomePane welcomePane;
     private SplitPane designerSplit;
     private SplitPane centerSplit;
-    private Node editorArea;
-    private final Button maximizeBottom = new Button(null, new FontIcon(Feather.MAXIMIZE_2));
-    private boolean bottomMaximized;
+    private Node editorHolder;
+    private Node bottomHolder;
+    private Node canvasScroll;
+    /** Hosts whatever the selected top-strip tab shows: the canvas, or a promoted code pane. */
+    private final StackPane centerContent = new StackPane();
+    private final Button promoteButton = new Button(null, new FontIcon(Feather.MAXIMIZE_2));
+    private final Button demoteButton = new Button(null, new FontIcon(Feather.MINIMIZE_2));
     private double savedCenterDivider = 0.72;
+
+    /** The two code panes, each either docked in {@link #bottomTabs} or promoted into {@link #formTabs}. */
+    private Tab eventsTab;
+    private Tab consoleTab;
+    /** Where a promoted code tab sits in the top strip, remembered across tab-strip rebuilds. */
+    private final Map<Tab, Integer> promotedIndex = new HashMap<>();
 
     private ToolBar toolBar;
     private final List<Menu> designerMenus = new ArrayList<>();
@@ -121,7 +135,7 @@ public class MainWindow {
             }
         });
         canvas.setOnOpenEvents(c -> {
-            bottomTabs.getSelectionModel().select(0);
+            focusCodeTab(eventsTab);
             eventEditor.focusCode();
         });
         canvas.setOnCheckpoint(undoManager::checkpoint);
@@ -146,7 +160,7 @@ public class MainWindow {
             markDirty();
         });
         inspector.setOnEditEvent((c, key) -> {
-            bottomTabs.getSelectionModel().select(0);
+            focusCodeTab(eventsTab);
             if (c == null) {
                 eventEditor.showForm(model);
             } else {
@@ -228,11 +242,17 @@ public class MainWindow {
             if (formTabsUpdating || tab == null) {
                 return;
             }
-            FormModel picked = (FormModel) tab.getUserData();
-            if (picked != null && picked != model) {
-                model = picked;
-                bindActiveForm();
+            if (tab.getUserData() instanceof FormModel picked) {
+                if (picked != model) {
+                    model = picked;
+                    bindActiveForm();
+                }
+                showInCenter(canvasScroll);
+            } else {
+                // a promoted code tab: its pane renders full height under the shared strip
+                showInCenter(tab == eventsTab ? eventEditor : console);
             }
+            updateCornerButtons();
         });
 
         Region corner = new Region();
@@ -253,54 +273,181 @@ public class MainWindow {
         ScrollPane scroll = new ScrollPane(canvasHolder);
         scroll.setFitToWidth(true);
         scroll.setFitToHeight(true);
+        canvasScroll = scroll;
 
-        // tabs hold no content (the canvas below is the editor), so their computed
-        // min height is ~0 — pin it so the tab strip can never be squeezed away
+        // tabs hold no content (centerContent below is the editor), so their computed
+        // min height is ~0 - pin it so the tab strip can never be squeezed away
         formTabs.setMinHeight(Region.USE_PREF_SIZE);
-        VBox editor = new VBox(formTabs, scroll);
-        VBox.setVgrow(scroll, Priority.ALWAYS);
-        editorArea = editor;
+        centerContent.getChildren().add(canvasScroll);
+        VBox editor = new VBox(formTabs, centerContent);
+        VBox.setVgrow(centerContent, Priority.ALWAYS);
 
-        Tab eventsTab = new Tab("Events", eventEditor);
-        eventsTab.setClosable(false);
-        eventsTab.setGraphic(new FontIcon(Feather.ZAP));
-        Tab consoleTab = new Tab("Console", console);
-        consoleTab.setClosable(false);
-        consoleTab.setGraphic(new FontIcon(Feather.TERMINAL));
+        eventsTab = codeTab("Events", Feather.ZAP, eventEditor);
+        consoleTab = codeTab("Console", Feather.TERMINAL, console);
         bottomTabs.getTabs().addAll(eventsTab, consoleTab);
+        bottomTabs.getSelectionModel().selectedItemProperty()
+                .addListener((obs, was, tab) -> updateCornerButtons());
 
-        // maximize/restore toggle overlaid at the right end of the bottom tab strip
-        maximizeBottom.getStyleClass().addAll("flat", "button-icon", "small", "bottom-max-button");
-        maximizeBottom.setTooltip(new Tooltip("Maximize code editor (Shortcut+Shift+M)"));
-        maximizeBottom.setFocusTraversable(false);
-        maximizeBottom.setOnAction(e -> toggleBottomMaximized());
-        StackPane bottomHolder = new StackPane(bottomTabs, maximizeBottom);
-        StackPane.setAlignment(maximizeBottom, Pos.TOP_RIGHT);
-        StackPane.setMargin(maximizeBottom, new Insets(3, 6, 0, 0));
+        // maximize/restore toggles overlaid at the right end of each tab strip
+        cornerButton(promoteButton, "Maximize the selected code pane (Shortcut+Shift+M)",
+                () -> promote(bottomTabs.getSelectionModel().getSelectedItem()));
+        cornerButton(demoteButton, "Send the selected code pane back down (Shortcut+Shift+M)",
+                () -> demote(formTabs.getSelectionModel().getSelectedItem()));
 
-        centerSplit = new SplitPane(editorArea, bottomHolder);
+        editorHolder = new StackPane(editor, demoteButton);
+        bottomHolder = new StackPane(bottomTabs, promoteButton);
+
+        centerSplit = new SplitPane(editorHolder, bottomHolder);
         centerSplit.setOrientation(Orientation.VERTICAL);
         centerSplit.setDividerPositions(savedCenterDivider);
+        updateCornerButtons();
         return centerSplit;
     }
 
-    /** Toggles the bottom Events/Console pane between docked and full-height (canvas hidden). */
-    private void toggleBottomMaximized() {
-        if (bottomMaximized) {
-            centerSplit.getItems().add(0, editorArea);
-            centerSplit.setDividerPositions(savedCenterDivider);
-            maximizeBottom.setGraphic(new FontIcon(Feather.MAXIMIZE_2));
-            maximizeBottom.setTooltip(new Tooltip("Maximize code editor (Shortcut+Shift+M)"));
-        } else {
+    private Tab codeTab(String title, Feather glyph, Node pane) {
+        Tab tab = new Tab();
+        tab.setClosable(false);
+        tab.setContent(pane);
+        HBox handle = new HBox(6, new FontIcon(glyph), new Label(title));
+        handle.setAlignment(Pos.CENTER_LEFT);
+        handle.getStyleClass().add("drag-tab");
+        tab.setGraphic(handle);
+        DraggableTabs.enable(tab, handle, this::onTabsReordered);
+
+        MenuItem toggle = new MenuItem();
+        toggle.setOnAction(e -> toggleCodePane(tab));
+        ContextMenu menu = new ContextMenu(toggle);
+        menu.setOnShowing(e -> toggle.setText(isPromoted(tab) ? "Restore" : "Maximize"));
+        tab.setContextMenu(menu);
+        return tab;
+    }
+
+    private void cornerButton(Button button, String tooltip, Runnable action) {
+        button.getStyleClass().addAll("flat", "button-icon", "small", "pane-max-button");
+        button.setTooltip(new Tooltip(tooltip));
+        button.setFocusTraversable(false);
+        button.setOnAction(e -> action.run());
+        StackPane.setAlignment(button, Pos.TOP_RIGHT);
+        StackPane.setMargin(button, new Insets(3, 6, 0, 0));
+    }
+
+    private boolean isPromoted(Tab tab) {
+        return tab != null && tab.getTabPane() == formTabs && !(tab.getUserData() instanceof FormModel);
+    }
+
+    /** Shows exactly one node in the area under the top tab strip. */
+    private void showInCenter(Node node) {
+        if (node != null && (centerContent.getChildren().size() != 1
+                || centerContent.getChildren().get(0) != node)) {
+            centerContent.getChildren().setAll(node);
+        }
+    }
+
+    /** Moves a code pane up into the shared top strip, where it renders at full height. */
+    private void promote(Tab tab) {
+        if (tab == null || isPromoted(tab)) {
+            return;
+        }
+        Node pane = tab.getContent();
+        tab.setContent(null);
+        bottomTabs.getTabs().remove(tab);
+        if (bottomTabs.getTabs().isEmpty()) {
             double[] positions = centerSplit.getDividerPositions();
             if (positions.length > 0) {
                 savedCenterDivider = positions[0];
             }
-            centerSplit.getItems().remove(editorArea);
-            maximizeBottom.setGraphic(new FontIcon(Feather.MINIMIZE_2));
-            maximizeBottom.setTooltip(new Tooltip("Restore designer (Shortcut+Shift+M)"));
+            centerSplit.getItems().remove(bottomHolder);
         }
-        bottomMaximized = !bottomMaximized;
+        int index = promotedIndex.getOrDefault(tab, formTabs.getTabs().size());
+        formTabs.getTabs().add(Math.max(0, Math.min(index, formTabs.getTabs().size())), tab);
+        showInCenter(pane);
+        formTabs.getSelectionModel().select(tab);
+        updateCornerButtons();
+    }
+
+    /** Sends a promoted code pane back down to the docked bottom strip. */
+    private void demote(Tab tab) {
+        if (!isPromoted(tab)) {
+            return;
+        }
+        promotedIndex.put(tab, formTabs.getTabs().indexOf(tab));
+        formTabs.getTabs().remove(tab);
+        tab.setContent(tab == eventsTab ? eventEditor : console);
+        // keep Events left of Console however the strips were reordered
+        bottomTabs.getTabs().add(tab == eventsTab ? 0 : bottomTabs.getTabs().size(), tab);
+        if (!centerSplit.getItems().contains(bottomHolder)) {
+            centerSplit.getItems().add(bottomHolder);
+            centerSplit.setDividerPositions(savedCenterDivider);
+        }
+        bottomTabs.getSelectionModel().select(tab);
+        if (!isPromoted(formTabs.getSelectionModel().getSelectedItem())) {
+            showInCenter(canvasScroll);
+        }
+        updateCornerButtons();
+    }
+
+    private void toggleCodePane(Tab tab) {
+        if (isPromoted(tab)) {
+            demote(tab);
+        } else {
+            promote(tab);
+        }
+    }
+
+    /** Shortcut+Shift+M: send the selected promoted pane down, else bring the selected docked one up. */
+    private void toggleSelectedCodePane() {
+        Tab top = formTabs.getSelectionModel().getSelectedItem();
+        if (isPromoted(top)) {
+            demote(top);
+        } else {
+            promote(bottomTabs.getSelectionModel().getSelectedItem());
+        }
+    }
+
+    /** Each corner button only makes sense while its own strip has a code tab selected. */
+    private void updateCornerButtons() {
+        boolean canDemote = isPromoted(formTabs.getSelectionModel().getSelectedItem());
+        demoteButton.setVisible(canDemote);
+        demoteButton.setManaged(canDemote);
+        boolean canPromote = bottomTabs.getSelectionModel().getSelectedItem() != null;
+        promoteButton.setVisible(canPromote);
+        promoteButton.setManaged(canPromote);
+    }
+
+    /** After a drag the strip order is the truth: write it back to the project and remember it. */
+    private void onTabsReordered() {
+        rememberPromotedIndices();
+        List<FormModel> stripOrder = formTabs.getTabs().stream()
+                .map(Tab::getUserData)
+                .filter(FormModel.class::isInstance)
+                .map(FormModel.class::cast)
+                .toList();
+        if (stripOrder.equals(project.getForms())) {
+            return;  // only code tabs moved — nothing to record in the project
+        }
+        undoManager.checkpoint(null);
+        for (int i = 0; i < stripOrder.size(); i++) {
+            project.moveForm(stripOrder.get(i), i);
+        }
+        markDirty();
+        status.setText("Reordered forms");
+    }
+
+    private void rememberPromotedIndices() {
+        for (Tab tab : List.of(eventsTab, consoleTab)) {
+            if (isPromoted(tab)) {
+                promotedIndex.put(tab, formTabs.getTabs().indexOf(tab));
+            }
+        }
+    }
+
+    /** Selects a code pane wherever it currently lives, promoted or docked. */
+    private void focusCodeTab(Tab tab) {
+        if (isPromoted(tab)) {
+            formTabs.getSelectionModel().select(tab);
+        } else {
+            bottomTabs.getSelectionModel().select(tab);
+        }
     }
 
     private Node buildLeftPanel() {
@@ -381,7 +528,7 @@ public class MainWindow {
         darkItem.setOnAction(e -> setDarkTheme(darkItem.isSelected()));
         SeparatorMenuItem viewSeparator = new SeparatorMenuItem();
         MenuItem maximizeEditor =
-                item("Maximize / Restore Code Editor", "Shortcut+Shift+M", this::toggleBottomMaximized);
+                item("Maximize / Restore Code Pane", "Shortcut+Shift+M", this::toggleSelectedCodePane);
         view.getItems().addAll(darkItem, viewSeparator, maximizeEditor);
         designerViewItems.addAll(List.of(viewSeparator, maximizeEditor));
 
@@ -533,10 +680,19 @@ public class MainWindow {
 
     private void refreshFormTabs() {
         formTabsUpdating = true;
+        Tab wasSelected = formTabs.getSelectionModel().getSelectedItem();
+        Tab keepSelected = isPromoted(wasSelected) ? wasSelected : null;
+        rememberPromotedIndices();
+        List<Tab> promoted = Stream.of(eventsTab, consoleTab).filter(this::isPromoted).toList();
         formTabs.getTabs().clear();
+        Tab activeFormTab = null;
         for (FormModel form : project.getForms()) {
-            Tab tab = new Tab(tabTitle(form));
+            Tab tab = new Tab();
             tab.setUserData(form);
+            Label handle = new Label(tabTitle(form));
+            handle.getStyleClass().add("drag-tab");
+            tab.setGraphic(handle);
+            DraggableTabs.enable(tab, handle, this::onTabsReordered);
             tab.setOnCloseRequest(e -> {
                 e.consume();
                 deleteForm(form);
@@ -551,10 +707,22 @@ public class MainWindow {
             tab.setContextMenu(new ContextMenu(setMain));
             formTabs.getTabs().add(tab);
             if (form == model) {
-                formTabs.getSelectionModel().select(tab);
+                activeFormTab = tab;
             }
         }
+        // put the promoted code tabs back where the user left them (ascending, so inserts don't shift)
+        for (Tab tab : promoted.stream()
+                .sorted(Comparator.comparingInt(t -> promotedIndex.getOrDefault(t, Integer.MAX_VALUE)))
+                .toList()) {
+            int index = promotedIndex.getOrDefault(tab, formTabs.getTabs().size());
+            formTabs.getTabs().add(Math.max(0, Math.min(index, formTabs.getTabs().size())), tab);
+        }
         formTabsUpdating = false;
+        Tab select = keepSelected != null ? keepSelected : activeFormTab;
+        if (select != null) {
+            formTabs.getSelectionModel().select(select);
+        }
+        updateCornerButtons();
     }
 
     private String tabTitle(FormModel form) {
@@ -765,7 +933,7 @@ public class MainWindow {
 
     private void run() {
         console.clear();
-        bottomTabs.getSelectionModel().select(1);
+        focusCodeTab(consoleTab);
         AppRunner.run(project,
                 s -> {
                     status.setText(s);
@@ -802,7 +970,7 @@ public class MainWindow {
                         .findFirst().orElse(null);
         canvas.select(target);
         eventEditor.selectEvent(entry.eventKey());
-        bottomTabs.getSelectionModel().select(0);
+        focusCodeTab(eventsTab);
         long delta = Math.max(0, err.line() - entry.generatedLine());
         eventEditor.focusLine(entry.userLine() + (int) delta);
         status.setText("Error in " + (entry.componentId() == null ? "form" : entry.componentId())
