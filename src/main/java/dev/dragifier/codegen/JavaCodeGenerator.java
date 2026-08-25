@@ -116,7 +116,11 @@ public final class JavaCodeGenerator {
         out.append("import javafx.scene.web.WebView;\n");
         out.append("import javafx.stage.Stage;\n");
         out.append("import javafx.util.Duration;\n");
-        out.append("import java.io.File;\n\n");
+        out.append("import java.io.File;\n");
+        // handler code routinely reaches for List/Map/ArrayList; without this every use
+        // would have to be fully qualified. No java.util type collides with the javafx
+        // wildcards above, so the extra import can't make an existing name ambiguous.
+        out.append("import java.util.*;\n\n");
         out.append("public class ").append(cls).append(" extends Stage {\n\n");
         out.append("    private final Stage stage = this;\n");
         for (FormComponent c : form.getComponents()) {
@@ -515,6 +519,17 @@ public final class JavaCodeGenerator {
             appendUserCode(out, code, form, c.getId(), spec.key(), cls, map);
             out.append("        });\n");
         }
+    }
+
+    /**
+     * The JavaFX class a type maps to, for callers that have no component to hand
+     * (the AI system prompt). StackPanel alone depends on its orientation, so this
+     * reports its vertical default; the component overload is the exact one.
+     */
+    public static String javaTypeFor(ComponentType type) {
+        FormComponent probe = new FormComponent();
+        probe.setType(type);
+        return javaTypeFor(probe);
     }
 
     private static String javaTypeFor(FormComponent c) {

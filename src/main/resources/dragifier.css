@@ -205,3 +205,87 @@
     -fx-border-color: -color-accent-emphasis;
     -fx-border-width: 0 0 2 0;
 }
+
+/* ---------------------------------------------------------------- AI chat */
+
+.ai-pane {
+    -fx-background-color: -color-bg-subtle;
+}
+
+.ai-bubble {
+    -fx-padding: 6 8 8 8;
+    -fx-background-radius: 6;
+    -fx-border-radius: 6;
+    -fx-border-width: 1;
+}
+
+.ai-bubble-user {
+    -fx-background-color: -color-accent-subtle;
+    -fx-border-color: -color-accent-muted;
+}
+
+.ai-bubble-assistant {
+    -fx-background-color: -color-bg-default;
+    -fx-border-color: -color-border-default;
+}
+
+.ai-bubble-error {
+    -fx-background-color: -color-danger-subtle;
+    -fx-border-color: -color-danger-muted;
+}
+
+.ai-role {
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
+/* message bodies are TextAreas so code can be selected and copied; strip the
+   control chrome so they read as text rather than as input fields */
+.ai-body,
+.ai-body .content {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.ai-body {
+    -fx-font-size: 12px;
+    -fx-text-fill: -color-fg-default;
+}
+
+.ai-body .scroll-bar:vertical,
+.ai-body .scroll-bar:horizontal {
+    -fx-opacity: 0;
+    -fx-pref-width: 0;
+    -fx-pref-height: 0;
+}
+
+.ai-summary {
+    -fx-padding: 0 0 0 8;
+}
+
+.ai-note {
+    -fx-font-size: 11px;
+}
+
+.ai-status-ok {
+    -fx-text-fill: -color-success-fg;
+}
+
+.ai-status-error {
+    -fx-text-fill: -color-danger-fg;
+}
+
+.ai-status-warn {
+    -fx-text-fill: -color-warning-fg;
+}
+
+.ai-usage {
+    -fx-text-fill: -color-fg-muted;
+    -fx-font-family: 'Cascadia Code', 'Consolas', monospace;
+}
+
+.ai-input {
+    -fx-font-size: 12px;
+}

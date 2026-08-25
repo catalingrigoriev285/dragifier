@@ -40,6 +40,8 @@ public class EventEditorPane extends VBox {
     private final javafx.scene.control.MenuButton insertMenu = new javafx.scene.control.MenuButton("Insert");
     private java.util.function.Supplier<java.util.List<String>> formNames = java.util.List::of;
     private java.util.function.Supplier<FormModel> contextForm = () -> null;
+    private final javafx.scene.control.Button askAiButton = new javafx.scene.control.Button("Ask AI");
+    private java.util.function.Consumer<String> onAskAi = request -> {};
 
     private final javafx.stage.Popup completionPopup = new javafx.stage.Popup();
     private final javafx.scene.control.ListView<String> completionList = new javafx.scene.control.ListView<>();
@@ -64,7 +66,10 @@ public class EventEditorPane extends VBox {
         eventBox.setOnAction(e -> loadCode());
 
         buildInsertMenu();
-        HBox top = new HBox(10, header, eventBox, insertMenu, hint);
+        askAiButton.setTooltip(new javafx.scene.control.Tooltip(
+                "Have the assistant write this handler"));
+        askAiButton.setOnAction(e -> askAi());
+        HBox top = new HBox(10, header, eventBox, insertMenu, askAiButton, hint);
         top.setStyle("-fx-alignment: center-left;");
 
         codeArea.getStyleClass().add("code-area");
@@ -327,6 +332,7 @@ public class EventEditorPane extends VBox {
         eventBox.setDisable(!hasEvents);
         codeArea.setDisable(!hasEvents);
         insertMenu.setDisable(!hasEvents);
+        askAiButton.setDisable(!hasEvents);
         updating = false;
         loadCode();
     }
@@ -341,11 +347,44 @@ public class EventEditorPane extends VBox {
         eventBox.setDisable(true);
         codeArea.setDisable(true);
         insertMenu.setDisable(true);
+        askAiButton.setDisable(true);
         updating = false;
     }
 
     public void focusCode() {
         codeArea.requestFocus();
+    }
+
+    /** The event currently being edited, or null when none is selected. */
+    public String selectedEventKey() {
+        EventSpec spec = eventBox.getSelectionModel().getSelectedItem();
+        return spec == null ? null : spec.key();
+    }
+
+    /** Called with what the user typed when they ask the assistant for this handler. */
+    public void setOnAskAi(java.util.function.Consumer<String> onAskAi) {
+        this.onAskAi = onAskAi;
+    }
+
+    /**
+     * Asks what the handler should do, then hands it to the assistant. The reply
+     * arrives as an ordinary edit to this event, so it lands in this editor and
+     * persists through the same text listener as anything typed by hand.
+     */
+    private void askAi() {
+        if (currentEvents == null || selectedEventKey() == null) {
+            return;
+        }
+        javafx.scene.control.TextInputDialog prompt = new javafx.scene.control.TextInputDialog();
+        prompt.initOwner(getScene() == null ? null : getScene().getWindow());
+        prompt.setTitle("Ask AI");
+        prompt.setHeaderText("What should " + header.getText().replace("Events — ", "")
+                + " do on " + selectedEventKey() + "?");
+        prompt.setContentText("");
+        prompt.getEditor().setPrefColumnCount(40);
+        prompt.showAndWait()
+                .filter(request -> !request.isBlank())
+                .ifPresent(request -> onAskAi.accept(request.strip()));
     }
 
     /** Selects the event with the given key in the event chooser (if present). */

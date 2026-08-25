@@ -19,6 +19,12 @@ public final class ProblemsDialog {
 
     public static void show(Window owner, List<AppRunner.CompileError> errors,
                             Consumer<AppRunner.CompileError> onGoTo) {
+        show(owner, errors, onGoTo, null);
+    }
+
+    /** @param onFixWithAi hands the whole list to the assistant; omitted (null) hides the button */
+    public static void show(Window owner, List<AppRunner.CompileError> errors,
+                            Consumer<AppRunner.CompileError> onGoTo, Runnable onFixWithAi) {
         Dialog<Void> dialog = new Dialog<>();
         dialog.initOwner(owner);
         dialog.setTitle("Problems");
@@ -45,8 +51,12 @@ public final class ProblemsDialog {
         list.getSelectionModel().selectFirst();
 
         ButtonType goTo = new ButtonType("Go to Code", ButtonBar.ButtonData.OK_DONE);
+        ButtonType fixWithAi = new ButtonType("Fix with AI", ButtonBar.ButtonData.OTHER);
         dialog.getDialogPane().setContent(list);
         dialog.getDialogPane().getButtonTypes().addAll(goTo, ButtonType.CLOSE);
+        if (onFixWithAi != null) {
+            dialog.getDialogPane().getButtonTypes().add(fixWithAi);
+        }
 
         list.setOnMouseClicked(e -> {
             if (e.getClickCount() == 2 && list.getSelectionModel().getSelectedItem() != null) {
@@ -57,6 +67,8 @@ public final class ProblemsDialog {
         dialog.setResultConverter(button -> {
             if (button == goTo && list.getSelectionModel().getSelectedItem() != null) {
                 onGoTo.accept(list.getSelectionModel().getSelectedItem());
+            } else if (button == fixWithAi && onFixWithAi != null) {
+                onFixWithAi.run();
             }
             return null;
         });

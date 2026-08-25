@@ -56,3 +56,10 @@ tasks.register<JavaExec>("packageSmoke") {
         args("--with-web")
     }
 }
+
+tasks.register<JavaExec>("aiSmoke") {
+    group = "verification"
+    description = "Headless check of the AI edit protocol (pass --args=--print-prompt to dump the system prompt)"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass = "dev.dragifier.AiSmoke"
+}

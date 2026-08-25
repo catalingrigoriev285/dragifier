@@ -2,6 +2,9 @@ package dev.dragifier.ui;
 
 import atlantafx.base.theme.PrimerDark;
 import atlantafx.base.theme.PrimerLight;
+import dev.dragifier.ai.AiSession;
+import dev.dragifier.ai.AiSettings;
+import dev.dragifier.ai.OpenRouterClient;
 import dev.dragifier.codegen.JavaCodeGenerator;
 import dev.dragifier.io.ProjectIO;
 import dev.dragifier.io.RecentProjects;
@@ -87,7 +90,14 @@ public class MainWindow {
     private final EventEditorPane eventEditor = new EventEditorPane();
     private final ConsolePane console = new ConsolePane();
     private final ComponentTreePane tree = new ComponentTreePane();
+    private final AiChatPane aiPane = new AiChatPane();
     private final UndoManager undoManager = new UndoManager(() -> ProjectIO.toJson(project));
+
+    private AiSession aiSession;
+    private TabPane rightTabs;
+    private Tab aiTab;
+    /** The last failed compile, so "Fix Last Errors with AI" has something to work from. */
+    private AppRunner.CompileResult lastCompileFailure;
 
     private final TabPane formTabs = new TabPane();
     private boolean formTabsUpdating;
@@ -147,6 +157,7 @@ public class MainWindow {
         eventEditor.setOnEdited(this::markDirty);
         eventEditor.setFormNames(() -> project.getForms().stream().map(FormModel::getName).toList());
         eventEditor.setContextForm(() -> model);
+        eventEditor.setOnAskAi(this::askAiAboutEvent);
         tree.setOnPick(canvas::select);
         tree.setOnMove(this::applyTreeMove);
         canvas.setOnFormResized(() -> {
@@ -216,12 +227,14 @@ public class MainWindow {
 
         Node leftPanel = buildLeftPanel();
         Node designerCenter = buildDesignerCenter();
-        designerSplit = new SplitPane(leftPanel, designerCenter, inspector);
+        Region rightPanel = buildRightPanel();
+        designerSplit = new SplitPane(leftPanel, designerCenter, rightPanel);
         designerSplit.setOrientation(Orientation.HORIZONTAL);
         SplitPane.setResizableWithParent(leftPanel, false);
-        SplitPane.setResizableWithParent(inspector, false);
-        fitSidePanels((Region) leftPanel, inspector);
+        SplitPane.setResizableWithParent(rightPanel, false);
+        fitSidePanels((Region) leftPanel, rightPanel);
 
+        buildAiSession();
         toolBar = buildToolBar();
         root.setTop(new VBox(buildMenuBar(), toolBar));
         buildStatusBar();
@@ -479,6 +492,34 @@ public class MainWindow {
         });
     }
 
+    /**
+     * Properties and the AI chat share the right column. A {@code TabPane} does
+     * not inherit its content's width hints, so it has to carry them itself —
+     * {@link #fitSidePanels} sizes the column from {@code getPrefWidth}.
+     */
+    private Region buildRightPanel() {
+        rightTabs = new TabPane(sideTab("Properties", Feather.SLIDERS, inspector),
+                aiTab = sideTab("AI", Feather.MESSAGE_SQUARE, aiPane));
+        rightTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        rightTabs.getStyleClass().add("side-panel");
+        double width = Math.max(inspector.getPrefWidth(), aiPane.getPrefWidth());
+        rightTabs.setPrefWidth(width);
+        rightTabs.setMinWidth(width);
+        return rightTabs;
+    }
+
+    /** Like {@link #codeTab} but fixed in place: two panes have no useful order to drag into. */
+    private Tab sideTab(String title, Feather glyph, Node pane) {
+        Tab tab = new Tab();
+        tab.setClosable(false);
+        tab.setContent(pane);
+        HBox handle = new HBox(6, new FontIcon(glyph), new Label(title));
+        handle.setAlignment(Pos.CENTER_LEFT);
+        handle.getStyleClass().add("drag-tab");  // for the themed selected/unselected colours
+        tab.setGraphic(handle);
+        return tab;
+    }
+
     private Node buildLeftPanel() {
         PalettePane palette = new PalettePane();
         SplitPane left = new SplitPane(palette, tree);
@@ -595,8 +636,17 @@ public class MainWindow {
                 item("Package App…", null, () -> packageTo(AppPackager.OutputType.APP_IMAGE)),
                 item("Package Installer (.exe)…", null, () -> packageTo(AppPackager.OutputType.INSTALLER)));
 
+        // the AI menu stays visible on the welcome page so Settings is always reachable;
+        // only its two project actions hide with the rest of the designer chrome
+        Menu ai = new Menu("AI");
+        MenuItem ask = item("Ask AI…", "Shortcut+Shift+A", this::askAi);
+        MenuItem fix = item("Fix Last Errors with AI", null, this::fixErrorsWithAi);
+        SeparatorMenuItem aiSeparator = new SeparatorMenuItem();
+        ai.getItems().addAll(ask, fix, aiSeparator, item("AI Settings…", null, this::showAiSettings));
+        designerViewItems.addAll(List.of(ask, fix, aiSeparator));
+
         designerMenus.addAll(List.of(edit, arrange, project));
-        return new MenuBar(file, edit, view, arrange, project);
+        return new MenuBar(file, edit, view, arrange, project, ai);
     }
 
     private void rebuildRecentMenu(Menu openRecent) {
@@ -633,6 +683,8 @@ public class MainWindow {
         addForm.setOnAction(e -> addForm());
         Button setMain = iconButton(Feather.STAR, "Set Active Form as Main");
         setMain.setOnAction(e -> setActiveFormAsMain());
+        Button ai = iconButton(Feather.MESSAGE_SQUARE, "Ask AI (Shortcut+Shift+A)");
+        ai.setOnAction(e -> askAi());
 
         ToggleButton snap = new ToggleButton(null, new FontIcon(Feather.GRID));
         snap.setSelected(true);
@@ -663,7 +715,7 @@ public class MainWindow {
 
         return new ToolBar(run, preview, export, pack,
                 new Separator(), addForm, setMain,
-                new Separator(), snap,
+                new Separator(), snap, ai,
                 spacer, new Label("Zoom:"), zoomBox);
     }
 
@@ -692,6 +744,112 @@ public class MainWindow {
         if (dark) {
             rootClasses.add("dark");
         }
+    }
+
+    // -------------------------------------------------------------------- AI
+
+    private void buildAiSession() {
+        aiSession = new AiSession(new OpenRouterClient());
+        aiSession.setProject(() -> project);
+        aiSession.setActiveForm(() -> model);
+        aiSession.setCheckpoint(() -> undoManager.checkpoint(null));
+        aiSession.setOnApplied(this::afterAiEdit);
+        aiSession.setOnStatus(message -> {
+            aiPane.showStatus(message);
+            status.setText(message);
+        });
+        aiSession.setOnDelta(aiPane::appendDelta);
+        aiSession.setOnTurnEnd(turn -> {
+            aiPane.endAssistant(turn);
+            aiPane.setBusy(false);
+            status.setText(turn.compiled()
+                    ? turn.report().applied() + " changes from the assistant"
+                    : "The assistant's changes have " + turn.errors().size() + " compile errors");
+        });
+        aiSession.setOnError(message -> {
+            aiPane.addError(message);
+            aiPane.setBusy(false);
+            status.setText("AI request failed");
+        });
+
+        aiPane.setOnSend(() -> startAiTurn(aiPane.consumeInput(), null));
+        aiPane.setOnStop(() -> aiSession.stop());
+        aiPane.setOnOpenSettings(this::showAiSettings);
+    }
+
+    /** Rebinds every pane after the assistant has edited the model. */
+    private void afterAiEdit() {
+        if (!project.getForms().contains(model)) {
+            model = project.effectiveMain();  // the assistant deleted the form we were on
+        }
+        bindProject();
+        canvas.rebuild();
+        markDirty();
+    }
+
+    private void startAiTurn(String text, String scope) {
+        if (text == null || text.isBlank()) {
+            return;
+        }
+        if (!AiSettings.configured()) {
+            showAiSettings();
+            if (!AiSettings.configured()) {
+                return;
+            }
+        }
+        focusAiTab();
+        aiPane.addUserMessage(text);
+        aiPane.beginAssistant();
+        aiPane.setBusy(true);
+        aiSession.send(text, scope);
+    }
+
+    private void focusAiTab() {
+        if (root.getCenter() != designerSplit) {
+            showDesigner();
+        }
+        rightTabs.getSelectionModel().select(aiTab);
+    }
+
+    private void askAi() {
+        focusAiTab();
+        aiPane.focusInput();
+    }
+
+    private void showAiSettings() {
+        AiSettingsDialog.show(stage);
+        aiPane.refreshModelLabel();
+    }
+
+    /**
+     * Hands the last compile failure to the assistant. The detail goes to the
+     * model as scope; the chat shows the short line, not the whole error dump.
+     */
+    private void fixErrorsWithAi() {
+        if (lastCompileFailure == null || lastCompileFailure.errors().isEmpty()) {
+            status.setText("No compile errors to fix");
+            return;
+        }
+        int count = lastCompileFailure.errors().size();
+        startAiTurn("Fix the " + count + (count == 1 ? " compile error." : " compile errors."),
+                aiSession.compileErrorReport(lastCompileFailure));
+    }
+
+    /** "Ask AI" in the events editor: scoped to one handler so nothing else moves. */
+    private void askAiAboutEvent(String request) {
+        FormComponent selected = canvas.getSelected();
+        String eventKey = eventEditor.selectedEventKey();
+        if (eventKey == null) {
+            status.setText("Pick an event first");
+            return;
+        }
+        String target = selected == null
+                ? "the " + model.getName() + " form"
+                : selected.getId() + " (" + selected.getType().displayName + ")";
+        String scope = "Change only the \"" + eventKey + "\" handler of " + target
+                + " on form " + model.getName() + ". Reply with a single \"event\" op for that "
+                + "handler and nothing else — do not add, move or restyle any component.";
+        startAiTurn(request, scope);
     }
 
     // ------------------------------------------------------------ form tabs
@@ -977,6 +1135,7 @@ public class MainWindow {
     }
 
     private void showProblems(AppRunner.CompileResult result) {
+        lastCompileFailure = result;
         for (AppRunner.CompileError err : result.errors()) {
             console.append("[error] " + err.file() + ":" + err.line() + " " + err.message());
         }
@@ -987,7 +1146,7 @@ public class MainWindow {
                 return;
             }
             navigateToError(entry, err);
-        });
+        }, this::fixErrorsWithAi);
     }
 
     private void navigateToError(dev.dragifier.codegen.SourceMap.Entry entry, AppRunner.CompileError err) {
