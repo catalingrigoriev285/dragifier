@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Dragifier is a visual RAD IDE (DevelNext-style) for building JavaFX desktop apps by drag and drop.
+Dragifier is a visual RAD IDE for building JavaFX desktop apps by drag and drop.
 The IDE is a JavaFX app; the apps it produces are plain-JavaFX Java sources it generates, compiles
 and launches. Java 26 toolchain, JavaFX 26, Gradle 9.7.1 wrapper, Windows-targeted.
 

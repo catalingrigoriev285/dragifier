@@ -1,169 +1,162 @@
 # Dragifier
 
-A visual RAD IDE for building JavaFX desktop apps by drag and drop — in the spirit of
-[DevelNext](https://github.com/jphp-group/develnext), but pure Java on a modern stack
-(Java 26, JavaFX 26).
+![The Dragifier IDE: palette and component tree on the left, a form on the design canvas, the AI assistant on the right having just built a two-screen bank app](assets/465_1x_shots_so.png)
 
-## Run
+**A visual RAD IDE for building JavaFX desktop apps — drag out the interface, write plain Java
+behind it, and ship a self-contained `.exe`.** Or describe the app you want and let the built-in
+AI assistant build both halves for you.
+
+Pure Java on a modern stack: Java 26, JavaFX 26, no runtime dependencies in the apps you make.
 
 ```
 gradlew run
 ```
 
-## What works (milestone 1)
+---
 
-- **Palette → canvas drag and drop**: Button, Label, TextField, TextArea, CheckBox, Slider,
-  Panel, ComboBox, ListView, RadioButton, ProgressBar, Hyperlink, Image
-- **Visual designer**: click to select, drag to move (8 px grid snap), 8 resize handles,
-  arrow keys to nudge (Shift = grid step), Delete to remove
-- **Properties inspector**: position/size, text, font size, text color, custom background;
-  form title and window size when nothing is selected
-- **Save / load** projects as JSON (`*.dragifier`)
-- **Quick Preview** (Shift+F5): renders the form as a live window, no compile
-- **Export Java Code**: generates a standalone JavaFX `Application` source file for the form
+## Build an app by describing it
 
-## What works (milestone 2)
+The **AI** tab sits beside the properties inspector. Tell it *"make me a calculator"* or
+*"create a bank simulation app with auth"* and it lays out the components **and** writes the
+event handlers behind them — the screenshot above is one prompt.
 
-- **Event handlers**: select (or double-click) a component and write Java for its event
-  ("On click", "On enter", "On value change"...) in the code pane at the bottom.
-  Handler code can reference any component on the form by its id, plus `stage`:
-  `label1.setText("Hello, " + textField1.getText() + "!");`
-- **▶ Run** (F5): generates the Java source, compiles it in-process with the `javac` API,
-  and launches your app as a separate Java process. Compile errors pop up with line numbers.
-- `gradlew smoke` — headless check that generated form code compiles and undo/redo behaves
+It is wired to [OpenRouter](https://openrouter.ai), so you can point it at any model they
+route to. Add your key in **File → AI Settings**, then hit **Refresh** to pick from the live
+model list. Usage and cost are shown per turn.
 
-## What works (milestone 3)
+What makes it trustworthy rather than a party trick:
 
-- **Undo / redo** (Ctrl+Z / Ctrl+Y): snapshot-based, covering every edit — drops, moves,
-  resizes, property changes, event code, deletes. Drags and typing bursts coalesce into
-  single undo steps.
-- **Copy / Paste / Duplicate** (Ctrl+C / Ctrl+V / Ctrl+D): clones a component with a fresh
-  id, including all its properties and event code.
-- **Component tree**: every component listed under the palette; selection syncs both ways
-  with the canvas.
+- **Every change is checked by `javac` before you see it.** After the assistant edits your
+  project, Dragifier generates the sources and compiles them headlessly. If anything is broken,
+  the errors are handed back — pointing at *your* event code, not generated line numbers — and
+  the assistant gets one round to fix it.
+- **One `Ctrl+Z` undoes a whole turn**, however many components it touched.
+- **Nothing is taken on faith.** Component ids, types, event keys, slots and property names are
+  all validated against the real model. Anything refused is reported in the chat instead of
+  quietly doing nothing.
+- **Your images and media are never uploaded.** The assistant sees the structure of your
+  project and your handler code; binary assets are replaced by a flag.
 
-## What works (milestone 4)
+Two more places it shows up: **Fix with AI** on the compile-errors dialog, and **Ask AI** in the
+event editor to write or explain the handler you have open.
 
-- **Package App…** (Project menu): compiles your form and runs `jpackage` to produce a
-  self-contained Windows app — a folder with `YourApp.exe` and a bundled Java+JavaFX
-  runtime, runnable on machines with no Java installed.
-- `gradlew packageSmoke` — headless check of the full compile → jar → jpackage pipeline
+Prefer to work without it? Everything below works exactly the same with the AI tab untouched.
 
-## What works (milestone 5)
+---
 
-- **Multi-select**: Ctrl+click to add/remove, drag a marquee on empty canvas, Ctrl+A for all.
-  Group drag, nudge, delete, copy/paste and duplicate all operate on the whole selection.
-- **Smart alignment guides**: while dragging, dashed guides appear when edges or centers
-  line up with other components or the form's center, and the drag snaps to them.
-- **Arrange menu**: align left/right/top/bottom, center horizontally/vertically, same size —
-  anchored on the first-selected component.
+## Design
 
-## What works (milestone 6)
+**Drag from the palette onto the canvas.** Click to select, drag to move (8 px grid snap),
+eight resize handles, arrow keys to nudge. Ctrl+click and marquee drag for multi-select;
+group move, resize, align and delete.
 
-- **More components**: ComboBox, ListView, RadioButton, ProgressBar, Hyperlink — with
-  per-type properties (an "Items" list for ComboBox/ListView, a progress value) and
-  events ("On select" for ComboBox/ListView, "On toggle"/"On click" for the rest).
+- **Smart guides** — dashed lines appear while dragging when edges or centers line up with a
+  neighbour or the form's centre, and the drag snaps to them
+- **Nesting** — drop components *into* containers to any depth; the component tree shows the
+  hierarchy and drag-reorders it
+- **Docking** — give a component an edge (`TOP`/`LEFT`/`RIGHT`/`BOTTOM`/`FILL`) and it takes
+  that side of whatever space is left, classic RAD style
+- **Anchors** — on a resizable form, anchor left+right (or top+bottom) to stretch with the window
+- **Rulers and zoom** — pixel rulers, 50–200 % zoom, live cursor readout
+- **Arrange** — align, centre, same-size, z-order, and an Order editor for focus order
+- **Lock** a component so it selects but can't be moved
 
-## What works (milestone 7)
+The **properties inspector** is searchable and grouped: position and size, docking and anchors,
+font family/size/bold/italic, text and background colour, borders with radius, padding, margin,
+cursor, tooltip, visibility — plus per-type properties like a ComboBox's item list or a Grid's
+dimensions.
 
-- **Image component with an asset pipeline**: choose an image file in the inspector; it is
-  stored Base64-inside the project file (projects stay a single portable `.dragifier` file)
-  and bundled as a jar resource into Run builds and packaged exes, loaded via
-  `getResourceAsStream`. Dashed placeholder until an image is chosen; "On click" event.
+## Components
 
-## What works (milestone 8)
+**Basic** — Button, Label, TextField, TextArea, CheckBox, Slider, ComboBox, ListView,
+RadioButton, ProgressBar, Hyperlink, Image
 
-- **Multiple forms per project**: the toolbar has a form switcher plus "+ Form",
-  "− Form" and "Set Main" (★ marks the startup form). Each form has a Name (its
-  generated class name, editable in the inspector) and compiles to its own
-  `Stage` subclass, so opening another form from an event handler is plain Java:
-  `new Form2().show();`. Old single-form project files load transparently.
+**Containers** — Panel, GroupBox, ScrollView, TabControl, Splitter, StackPanel, Grid, DockPanel
 
-## What works (milestone 9)
+**Other** — Timer, Table, WebView, Media, FileBrowser
 
-- **Syntax-highlighted code editor**: the event code pane is a RichTextFX `CodeArea`
-  with Java keyword/string/comment/number highlighting and line numbers.
+## Code
 
-## What works (milestone 10)
+Select a component, pick an event, and write plain Java in the editor at the bottom — syntax
+highlighted, with line numbers and Ctrl+Space autocomplete over your component ids and their
+methods.
 
-- **Package Installer (.exe)…**: produces a Windows setup wizard (with Start-menu entry
-  and shortcut) via jpackage. Requires the [WiX toolset](https://wixtoolset.org)
-  (`dotnet tool install --global wix`); without it, a clear error explains what to install.
-  Both packaging actions now offer to open the output folder when done.
+```java
+label1.setText("Hello, " + textField1.getText() + "!");
+```
 
-## What works (milestone 11)
+Every component id is a field, so you reference things by the name you gave them. `stage` is the
+form's own window. Opening another form is ordinary Java: `new Form2().show();`
 
-- **Tooltip and Disabled** properties on every component (rendered live in the designer,
-  emitted in generated code).
-- **Form "On show" event**: with nothing selected, the event pane edits the form's own
-  events — code runs when the window opens.
-- **Canvas zoom**: 50–200% zoom combo in the toolbar; all editing works while zoomed.
+Generated apps get a small `UI` helper — `UI.alert`, `UI.confirm`, `UI.prompt`, toast
+notifications, file dialogs, clipboard, `UI.row(...)` for table rows, and `UI.eval` /
+`UI.formatNumber` for arithmetic. The **Insert ▾** menu drops ready-made snippets in.
 
-## What works (milestone 12)
+Beyond that there are **no third-party libraries** in what you build — just JavaFX and the JDK,
+which is what keeps the packaged output small and self-contained.
 
-- **Project templates** (File → New from Template…, Ctrl+Shift+N): Hello World, Counter,
-  Login Form, and Two Forms — each a complete working app with event code to learn from.
-- **Text alignment** property (Left/Center/Right) for buttons, labels, check/radio boxes,
-  hyperlinks and text fields.
+## Run and ship
 
-## What works (milestone 13)
+| | |
+|---|---|
+| **Quick Preview** (Shift+F5) | renders the form as a live window, no compile |
+| **Run** (F5) | generates sources, compiles in-process with the `javac` API, launches your app as its own process. Output streams into the Console tab |
+| **Export Java Code** (Ctrl+E) | writes the whole project out as plain `.java` files |
+| **Package App** | `jpackage` produces a folder with `YourApp.exe` and a bundled Java+JavaFX runtime — runs on machines with no Java installed |
+| **Package Installer (.exe)** | a Windows setup wizard with Start-menu entry. Needs the [WiX toolset](https://wixtoolset.org) (`dotnet tool install --global wix`) |
 
-- **Canvas rulers**: pixel rulers along the design canvas (labeled every 100 px), scaling
-  with zoom, plus a live cursor-position readout in the status bar.
-- **App icon** (Project → Set App Icon…): a `.png` becomes the window icon of every form
-  (bundled as a resource); a `.ico` becomes the packaged exe's icon via `jpackage --icon`.
+Compile errors are navigable: a Problems dialog lists them, and **Go to Code** selects the
+component, opens the right event and puts the caret on the offending line.
 
-## What works (milestone 14 — UI overhaul)
+## Projects
 
-- **Modern theme**: AtlantaFX Primer Light by default, View → Dark Theme for a full dark
-  mode (including the code editor's colors). All chrome uses theme variables.
-- **Professional layout**: forms as editor tabs (★ = startup form, right-click → Set as
-  Main, close = delete), icon toolbar (Feather icons), palette/tree and inspector restyled,
-  inspector grouped into collapsible Layout / Appearance / Behavior sections.
-- **Console tab**: compile progress and the running app's stdout/stderr stream live into
-  a bottom tab next to Events — `System.out.println` debugging works.
-- **Welcome screen**: on startup — new/open project, template gallery, recent projects
-  (also in File → Open Recent, persisted between sessions).
-- **Z-order** (Arrange → Bring to Front / Send to Back) and a **grid-snap toggle** in the toolbar.
+A project is a single portable `.dragifier` JSON file — images, media and the app icon are all
+inlined, so there is nothing to lose track of. Multiple forms per project, each compiling to its
+own `Stage` subclass; ★ marks the startup form.
 
-## What works (milestone 15 — DevelNext parity round)
+Start from a template (**File → New from Template**): Hello World, Counter, Login Form,
+Two Forms, Notepad, Calculator — each a complete working app to read.
 
-- **`UI` helper API** in every generated app: `UI.alert / confirm / prompt`, clipboard,
-  file dialogs, `UI.openLink`, `UI.row(...)` for tables. **Insert ▾** menu in the event
-  editor drops ready-made snippets (dialogs, open form, close window, println…).
-- **Timer component** (non-visual, VB-style): interval in ms, "On tick" event compiled
-  to a JavaFX Timeline; "Disabled" = don't start automatically (`timer1.play()` in code).
-- **New components**: **Table** (columns editor, rows via `table1.getItems().add(UI.row("Ana", "20"))`,
-  On select), **WebView** (Text property = start URL), **Media player** (audio/video file
-  bundled into the app, autoplay unless Disabled). WebView apps automatically run and
-  package with JavaFX on the classpath (javafx.web can't be jlinked on JDKs without
-  jdk.jsobject); everything else keeps the lean jlinked runtime.
-- **Autocomplete** in the code editor: Ctrl+Space (or typing `.`) suggests component ids,
-  `UI`/`stage`, and per-type methods; Enter/Tab inserts, Esc closes.
-- **Anchors + resizable forms**: a "Resizable window" form option and L/T/R/B anchor
-  checkboxes per component — anchor left+right (or top+bottom) to stretch with the
-  window, classic RAD behavior. Focus (tab) order follows z-order (Arrange menu).
+Everything is undoable — drops, moves, resizes, property edits, event code, deletes, AI turns.
+Drags and typing bursts coalesce into single steps.
 
-## What works (milestone 16 — RAD ergonomics round)
+## Shortcuts
 
-- **Resizable panels**: palette/tree, canvas, and inspector sit in draggable splitters.
-- **Component rename** (Id field or F2): `button1` → `saveButton` with every reference in
-  the form's event code updated automatically; invalid/duplicate ids are rejected.
-- **Canvas context menu** (cut/copy/paste/duplicate/delete, z-order, lock, align) and
-  a **Locked** flag — locked components select but can't be moved or resized.
-- **Order editor** (Arrange → Order…) and drag-to-reorder in the Components tree —
-  precise z-order and focus order.
-- **Palette filter** and **property search** in the inspector.
-- **Compile errors are navigable**: a Problems dialog lists them; Go to Code selects the
-  component, opens the right event, and puts the caret on the offending line.
+| | | | |
+|---|---|---|---|
+| `Ctrl+N` | New | `F5` | Run |
+| `Ctrl+Shift+N` | New from template | `Shift+F5` | Quick preview |
+| `Ctrl+O` / `Ctrl+S` | Open / Save | `Ctrl+E` | Export Java code |
+| `Ctrl+Z` / `Ctrl+Y` | Undo / Redo | `Ctrl+Shift+A` | Ask AI |
+| `Ctrl+C` / `Ctrl+V` / `Ctrl+D` | Copy / Paste / Duplicate | `Ctrl+Shift+M` | Maximize code pane |
+| `Ctrl+A` / `Delete` | Select all / Delete | `Ctrl+Shift+F` / `Ctrl+Shift+B` | Front / Back |
+| `F2` | Rename component | | |
 
-## Roadmap
+Renaming updates every reference to it in that form's event code.
 
-- Deferred by choice: behaviors, auto-save/backups, multi-select property editing, duplicate form, game features
+## Requirements
 
-## Project layout
+A **JDK** (not a JRE) — Dragifier compiles your apps with the in-process `javac` API. Java 26 is
+what it is built against. The Gradle wrapper fetches everything else.
 
-- `dev.dragifier.model` — form data model (what gets saved)
-- `dev.dragifier.ui` — IDE shell: palette, design canvas, inspector, preview
-- `dev.dragifier.io` — project save/load (JSON via Gson)
-- `dev.dragifier.codegen` — Java source generation from the model
+## Working on Dragifier
+
+```
+gradlew run            # launch the IDE
+gradlew smoke          # headless: codegen → compile, undo, rename, nesting, docking, templates
+gradlew aiSmoke        # headless: AI prompt coverage, op applier, a full turn — no API key needed
+gradlew packageSmoke   # the full compile → jar → jpackage pipeline (slow)
+```
+
+There is no JUnit suite; verification lives in those `main()` classes. See
+[CLAUDE.md](CLAUDE.md) for the architecture and the cross-file checklists.
+
+```
+dev.dragifier.model    — the form data model (what gets saved)
+dev.dragifier.ui       — IDE shell: palette, canvas, inspector, code editor, AI chat
+dev.dragifier.ai       — the assistant: prompt, edit protocol, OpenRouter client
+dev.dragifier.io       — project save/load
+dev.dragifier.codegen  — Java source generation
+dev.dragifier.runner   — compile and launch
+dev.dragifier.packager — jpackage
+```

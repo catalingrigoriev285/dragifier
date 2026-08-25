@@ -1,9 +1,9 @@
 package dev.dragifier.codegen;
 
 /**
- * The {@code UI.java} helper emitted into every generated project — DevelNext's
- * dialog/clipboard/file/notification modules, as one small plain-Java class
- * users call from event code: {@code UI.alert("Hi")}, {@code if (UI.confirm("Sure?")) ...},
+ * The {@code UI.java} helper emitted into every generated project — dialogs,
+ * clipboard, files and notifications as one small plain-Java class users call
+ * from event code: {@code UI.alert("Hi")}, {@code if (UI.confirm("Sure?")) ...},
  * {@code UI.notifySuccess("Saved")}. Plain JavaFX only: generated apps have no
  * third-party libraries on their classpath.
  */
