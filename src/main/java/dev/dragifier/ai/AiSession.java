@@ -182,7 +182,7 @@ public final class AiSession {
 
             if (!reply.structured() || reply.ops().isEmpty()) {
                 // a question, an explanation, or a model that ignored the contract
-                remember(userText, first.raw());
+                remember(userText, reply.text());
                 finish(new Turn(reply.text(), new AiOps.ApplyReport(0, List.of()),
                         List.of(), first.usage(), false, note));
                 return;
@@ -190,7 +190,7 @@ public final class AiSession {
 
             AiOps.ApplyReport report = applyOnFxThread(reply.ops());
             if (!AiSettings.autoVerify()) {
-                remember(userText, first.raw());
+                remember(userText, reply.text());
                 finish(new Turn(reply.text(), report, List.of(), first.usage(), false, note));
                 return;
             }
@@ -198,7 +198,7 @@ public final class AiSession {
             status("Checking that it compiles…");
             AppRunner.CompileResult result = compileCopy();
             if (result.ok() || cancelled) {
-                remember(userText, first.raw());
+                remember(userText, reply.text());
                 finish(new Turn(reply.text(), report, List.of(), first.usage(), false, note));
                 return;
             }
@@ -234,7 +234,7 @@ public final class AiSession {
             result = compileCopy();
         }
 
-        remember(userText, first.raw());
+        remember(userText, reply.text());
         Transport.Usage total = add(first.usage(), second.usage());
         String text = fix.structured() && !fix.text().isEmpty()
                 ? reply.text() + "\n\n" + fix.text()
@@ -248,16 +248,18 @@ public final class AiSession {
         ReplyStream replyStream = new ReplyStream(this::pushDelta);
         String[] finish = {""};
         Transport.Usage[] usage = {Transport.Usage.NONE};
+        boolean[] announcedOps = {false};
 
         transport.chat(AiSettings.model(), messages, new Transport.StreamSink() {
             @Override
             public void onDelta(String text) {
                 rawAll.append(text);
                 replyStream.append(text);
-                if (!replyStream.streamed()) {
-                    status("Thinking…");
-                } else {
-                    status("Writing the app…");
+                // exactly one status change per turn: status() hops to the FX thread,
+                // so calling it per delta would be the flood pushDelta exists to avoid
+                if (!announcedOps[0] && replyStream.finished()) {
+                    announcedOps[0] = true;
+                    status("Building it…");
                 }
             }
 
@@ -272,10 +274,10 @@ public final class AiSession {
             }
         });
         drainNow();
-        return new Completion(rawAll.toString(), finish[0], usage[0], replyStream.streamed());
+        return new Completion(rawAll.toString(), finish[0], usage[0]);
     }
 
-    private record Completion(String raw, String finishReason, Transport.Usage usage, boolean streamed) {}
+    private record Completion(String raw, String finishReason, Transport.Usage usage) {}
 
     // ---------------------------------------------------------------- model
 

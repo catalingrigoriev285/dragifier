@@ -54,6 +54,11 @@ public final class ReplyStream {
         return state != State.SEEKING;
     }
 
+    /** True once the reply string has closed and the ops are what is still arriving. */
+    public boolean finished() {
+        return state == State.DONE;
+    }
+
     private void seek() {
         int key = raw.indexOf(KEY, scan);
         if (key < 0) {
