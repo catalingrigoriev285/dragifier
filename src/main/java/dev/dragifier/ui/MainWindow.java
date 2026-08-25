@@ -62,6 +62,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 /** The main IDE window: menus, icon toolbar, form tabs, palette, design canvas, inspector, events/console. */
 public class MainWindow {
@@ -97,6 +99,10 @@ public class MainWindow {
     private final Button maximizeBottom = new Button(null, new FontIcon(Feather.MAXIMIZE_2));
     private boolean bottomMaximized;
     private double savedCenterDivider = 0.72;
+
+    private ToolBar toolBar;
+    private final List<Menu> designerMenus = new ArrayList<>();
+    private final List<MenuItem> designerViewItems = new ArrayList<>();
 
     public MainWindow(Stage stage) {
         this.stage = stage;
@@ -200,7 +206,8 @@ public class MainWindow {
         designerSplit.setDividerPositions(0.15, 0.82);
         inspector.setMinWidth(180);
 
-        root.setTop(new VBox(buildMenuBar(), buildToolBar()));
+        toolBar = buildToolBar();
+        root.setTop(new VBox(buildMenuBar(), toolBar));
         buildStatusBar();
 
         Scene scene = new Scene(root, 1200, 780);
@@ -319,10 +326,24 @@ public class MainWindow {
     private void showWelcome() {
         welcomePane.refreshRecents();
         root.setCenter(welcomePane);
+        setDesignerChromeEnabled(false);
     }
 
     private void showDesigner() {
         root.setCenter(designerSplit);
+        setDesignerChromeEnabled(true);
+    }
+
+    /** On the welcome page there is nothing to act on: hide the toolbar and the designer-only menus. */
+    private void setDesignerChromeEnabled(boolean enabled) {
+        toolBar.setVisible(enabled);
+        toolBar.setManaged(enabled);
+        for (Menu menu : designerMenus) {
+            menu.setVisible(enabled);
+        }
+        for (MenuItem menuItem : designerViewItems) {
+            menuItem.setVisible(enabled);
+        }
     }
 
     // ------------------------------------------------------------- menus/bar
@@ -358,9 +379,11 @@ public class MainWindow {
         Menu view = new Menu("View");
         CheckMenuItem darkItem = new CheckMenuItem("Dark Theme");
         darkItem.setOnAction(e -> setDarkTheme(darkItem.isSelected()));
-        view.getItems().addAll(darkItem,
-                new SeparatorMenuItem(),
-                item("Maximize / Restore Code Editor", "Shortcut+Shift+M", this::toggleBottomMaximized));
+        SeparatorMenuItem viewSeparator = new SeparatorMenuItem();
+        MenuItem maximizeEditor =
+                item("Maximize / Restore Code Editor", "Shortcut+Shift+M", this::toggleBottomMaximized);
+        view.getItems().addAll(darkItem, viewSeparator, maximizeEditor);
+        designerViewItems.addAll(List.of(viewSeparator, maximizeEditor));
 
         Menu arrange = new Menu("Arrange");
         arrange.getItems().addAll(
@@ -393,6 +416,7 @@ public class MainWindow {
                 item("Package App…", null, () -> packageTo(AppPackager.OutputType.APP_IMAGE)),
                 item("Package Installer (.exe)…", null, () -> packageTo(AppPackager.OutputType.INSTALLER)));
 
+        designerMenus.addAll(List.of(edit, arrange, project));
         return new MenuBar(file, edit, view, arrange, project);
     }
 
